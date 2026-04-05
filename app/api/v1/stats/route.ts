@@ -19,7 +19,7 @@ export async function GET() {
 
   const last_updated: Record<string, string> = {};
   if (Array.isArray(pipeline.data)) {
-    for (const row of pipeline.data) {
+    for (const row of pipeline.data as { pipeline: string; last_run: string }[]) {
       last_updated[row.pipeline] = row.last_run;
     }
   }
