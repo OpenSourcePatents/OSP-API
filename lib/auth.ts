@@ -1,5 +1,5 @@
 import { queryOSPDB, rpcOSPDB } from "./supabase";
-import { ratelimit } from "./redis";
+import { rateLimiters, getTierLimitLabel } from "./redis";
 
 interface AuthResult {
   valid: boolean;
@@ -29,13 +29,18 @@ export async function validateApiKey(request: Request): Promise<AuthResult> {
   }
 
   const row = keyRow as { id: string; tier: string };
+  const tier = row.tier || "free";
 
-  const { success } = await ratelimit.limit(row.id);
-  if (!success) {
-    return { valid: false, error: "Rate limit exceeded (1000 requests/hour)" };
+  // Admin tier bypasses rate limiting
+  if (tier !== "admin") {
+    const limiter = rateLimiters[tier as keyof typeof rateLimiters] || rateLimiters.free;
+    const { success } = await limiter.limit(row.id);
+    if (!success) {
+      return { valid: false, error: `Rate limit exceeded (${getTierLimitLabel(tier)})` };
+    }
   }
 
   await rpcOSPDB("increment_requests_today", { key_id: row.id });
 
-  return { valid: true, key_id: row.id, tier: row.tier };
+  return { valid: true, key_id: row.id, tier };
 }

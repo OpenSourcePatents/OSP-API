@@ -203,3 +203,56 @@ export function rpcOSPDB(fn: string, args: Record<string, unknown>) {
 export function queryCongress<T = Record<string, unknown>>(table: string, params?: QueryParams) {
   return query<T>(CONGRESS_URL, CONGRESS_KEY, table, params);
 }
+
+// --- Supabase Auth (GoTrue REST API) ---
+
+interface AuthResponse {
+  data: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export async function authSignUp(email: string, password: string): Promise<AuthResponse> {
+  const redirectTo = `${process.env.API_BASE_URL || "http://localhost:3000"}/api/auth/confirm`;
+  try {
+    const res = await fetch(`${OSP_URL}/auth/v1/signup`, {
+      method: "POST",
+      headers: {
+        apikey: OSP_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        data: {},
+        gotrue_meta_security: { captcha_token: "" },
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { data: null, error: body.msg || body.error_description || body.message || "Signup failed" };
+    }
+    return { data: body, error: null };
+  } catch (e) {
+    return { data: null, error: (e as Error).message };
+  }
+}
+
+export async function authVerifyOtp(tokenHash: string, type: string): Promise<AuthResponse> {
+  try {
+    const res = await fetch(`${OSP_URL}/auth/v1/verify`, {
+      method: "POST",
+      headers: {
+        apikey: OSP_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ token_hash: tokenHash, type }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { data: null, error: body.msg || body.error_description || body.message || "Verification failed" };
+    }
+    return { data: body, error: null };
+  } catch (e) {
+    return { data: null, error: (e as Error).message };
+  }
+}

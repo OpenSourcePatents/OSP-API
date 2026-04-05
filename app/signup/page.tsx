@@ -1,24 +1,35 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function SignupPage() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err === "missing_token") setError("Invalid confirmation link.");
+    else if (err === "invalid_token") setError("Confirmation link expired or invalid. Please sign up again.");
+    else if (err === "no_email") setError("Could not verify email. Please try again.");
+    else if (err === "key_generation_failed") setError("Failed to generate API key. Please contact support.");
+  }, [searchParams]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    setApiKey("");
+    setMessage("");
     setLoading(true);
 
     try {
       const res = await fetch("/api/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -28,7 +39,7 @@ export default function SignupPage() {
         return;
       }
 
-      setApiKey(data.key);
+      setMessage(data.message);
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -37,53 +48,66 @@ export default function SignupPage() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>OSP Civic Data API</h1>
-        <p style={styles.subtitle}>
-          Get a free API key to access congressional accountability data.
+    <div style={s.page}>
+      <div style={s.card}>
+        <h1 style={s.title}>OSP Civic Data API</h1>
+        <p style={s.subtitle}>
+          Create an account to get your free API key. You&apos;ll need to verify
+          your email before the key is generated.
         </p>
 
-        {!apiKey ? (
-          <form onSubmit={handleSubmit} style={styles.form}>
+        {message ? (
+          <div style={s.successBox}>
+            <p style={s.successLabel}>Almost there!</p>
+            <p style={s.successText}>{message}</p>
+            <button onClick={() => { setMessage(""); setEmail(""); setPassword(""); }} style={s.ghost}>
+              Start over
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={s.form}>
             <input
               type="email"
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              style={styles.input}
+              style={s.input}
             />
-            <button type="submit" disabled={loading} style={styles.button}>
-              {loading ? "Generating..." : "Get API Key"}
+            <input
+              type="password"
+              placeholder="Password (min 8 characters)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={8}
+              style={s.input}
+            />
+            <button type="submit" disabled={loading} style={s.button}>
+              {loading ? "Creating account..." : "Sign Up"}
             </button>
-            {error && <p style={styles.error}>{error}</p>}
+            {error && <p style={s.error}>{error}</p>}
           </form>
-        ) : (
-          <div style={styles.success}>
-            <p style={styles.successLabel}>Your API key:</p>
-            <pre style={styles.keyBox}>{apiKey}</pre>
-            <p style={styles.hint}>
-              Pass it as a header with every request:
-            </p>
-            <pre style={styles.codeBox}>X-API-Key: {apiKey}</pre>
-            <p style={styles.hint}>
-              A confirmation email has been sent to <strong>{email}</strong>.
-            </p>
-            <button
-              onClick={() => { setApiKey(""); setEmail(""); }}
-              style={styles.closeButton}
-            >
-              Done
-            </button>
-          </div>
         )}
+
+        <div style={s.divider} />
+
+        <p style={s.note}>
+          Educators, nonprofits, and researchers can apply for discounted access
+          (10,000 req/hr) &mdash; email{" "}
+          <a href="mailto:opensourcepatents@gmail.com" style={s.link}>
+            opensourcepatents@gmail.com
+          </a>
+        </p>
+        <p style={s.note}>
+          <a href="/pricing" style={s.link}>View all tiers &rarr;</a>
+        </p>
       </div>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100vh",
     backgroundColor: "#0a0a0f",
@@ -143,7 +167,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "0.875rem",
     margin: 0,
   },
-  success: {
+  successBox: {
     display: "flex",
     flexDirection: "column" as const,
     gap: "0.5rem",
@@ -151,48 +175,37 @@ const styles: Record<string, React.CSSProperties> = {
   successLabel: {
     color: "#22c55e",
     fontWeight: 600,
-    fontSize: "0.95rem",
+    fontSize: "1rem",
     margin: 0,
   },
-  keyBox: {
-    backgroundColor: "#0a0a0f",
-    border: "1px solid #2a2a3a",
-    borderRadius: 8,
-    padding: "0.75rem 1rem",
-    color: "#e0e0e0",
-    fontSize: "0.8rem",
-    overflowX: "auto" as const,
-    margin: 0,
-    wordBreak: "break-all" as const,
-    whiteSpace: "pre-wrap" as const,
-  },
-  codeBox: {
-    backgroundColor: "#0a0a0f",
-    border: "1px solid #2a2a3a",
-    borderRadius: 8,
-    padding: "0.75rem 1rem",
-    color: "#888",
-    fontSize: "0.8rem",
-    overflowX: "auto" as const,
-    margin: 0,
-    wordBreak: "break-all" as const,
-    whiteSpace: "pre-wrap" as const,
-  },
-  hint: {
-    color: "#666",
-    fontSize: "0.85rem",
-    margin: 0,
+  successText: {
+    color: "#aaa",
+    fontSize: "0.9rem",
     lineHeight: 1.5,
+    margin: 0,
   },
-  closeButton: {
-    marginTop: "0.75rem",
-    padding: "0.6rem 1rem",
+  ghost: {
+    marginTop: "0.5rem",
+    padding: "0.5rem 1rem",
     borderRadius: 8,
     border: "1px solid #2a2a3a",
     backgroundColor: "transparent",
     color: "#888",
-    fontSize: "0.9rem",
+    fontSize: "0.85rem",
     cursor: "pointer",
-    width: "100%",
+  },
+  divider: {
+    borderTop: "1px solid #1e1e2e",
+    margin: "1.5rem 0",
+  },
+  note: {
+    color: "#555",
+    fontSize: "0.8rem",
+    lineHeight: 1.5,
+    margin: "0.4rem 0",
+  },
+  link: {
+    color: "#3b82f6",
+    textDecoration: "none",
   },
 };

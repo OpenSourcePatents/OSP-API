@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0] - 2026-04-05
+### Added
+- Supabase Auth email verification -- users must confirm email before API key is generated
+- POST /api/signup now creates Supabase Auth user and triggers confirmation email
+- GET /api/auth/confirm callback verifies token, generates API key, emails it via Resend, redirects to success page
+- /auth/success page shows API key after email verification
+- Tier system: free (1,000/hr), discounted (10,000/hr), paid (10,000/hr), admin (unlimited)
+- /pricing page with tier comparison cards and discounted tier application info
+- lib/redis.ts exports tier-specific rate limiters instead of single instance
+- lib/auth.ts checks tier from api_keys and applies correct rate limiter; admin bypasses entirely
+
+### Changed
+- /signup page now collects email + password, shows "check your email" message instead of instant key
+- API keys are only generated after email confirmation, not on signup
+
 ## [0.6.0] - 2026-04-05
 ### Changed
 - Replaced @supabase/supabase-js createClient with direct REST API fetch calls for sb_secret_ key compatibility
