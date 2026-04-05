@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, FormEvent, useEffect } from "react";
+import { Suspense, useState, FormEvent, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function SignupPage() {
+function SignupForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,8 +48,7 @@ export default function SignupPage() {
   }
 
   return (
-    <div style={s.page}>
-      <div style={s.card}>
+    <div style={s.card}>
         <h1 style={s.title}>OSP Civic Data API</h1>
         <p style={s.subtitle}>
           Create an account to get your free API key. You&apos;ll need to verify
@@ -103,6 +102,15 @@ export default function SignupPage() {
           <a href="/pricing" style={s.link}>View all tiers &rarr;</a>
         </p>
       </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <div style={s.page}>
+      <Suspense fallback={<div style={s.card}><p style={s.subtitle}>Loading...</p></div>}>
+        <SignupForm />
+      </Suspense>
     </div>
   );
 }
