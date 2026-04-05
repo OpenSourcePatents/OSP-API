@@ -1,43 +1,52 @@
 "use client";
 
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function AuthSuccessPage() {
+function AuthSuccessContent() {
   const searchParams = useSearchParams();
   const apiKey = searchParams.get("key") || "";
   const email = searchParams.get("email") || "";
 
   return (
-    <div style={s.page}>
-      <div style={s.card}>
-        <h1 style={s.title}>Email Verified</h1>
+    <div style={s.card}>
+      <h1 style={s.title}>Email Verified</h1>
 
-        {apiKey ? (
-          <>
-            <p style={s.successLabel}>Your API key:</p>
-            <pre style={s.keyBox}>{apiKey}</pre>
-            <p style={s.hint}>Pass it as a header with every request:</p>
-            <pre style={s.codeBox}>X-API-Key: {apiKey}</pre>
-            <p style={s.hint}>
-              A copy has been emailed to <strong>{email}</strong>.
-            </p>
-            <p style={s.hint}>
-              Rate limit: 1,000 requests/hour (free tier).{" "}
-              <a href="/pricing" style={s.link}>View all tiers</a>
-            </p>
-          </>
-        ) : (
+      {apiKey ? (
+        <>
+          <p style={s.successLabel}>Your API key:</p>
+          <pre style={s.keyBox}>{apiKey}</pre>
+          <p style={s.hint}>Pass it as a header with every request:</p>
+          <pre style={s.codeBox}>X-API-Key: {apiKey}</pre>
           <p style={s.hint}>
-            Something went wrong. Please <a href="/signup" style={s.link}>try again</a> or
-            contact support.
+            A copy has been emailed to <strong>{email}</strong>.
           </p>
-        )}
+          <p style={s.hint}>
+            Rate limit: 1,000 requests/hour (free tier).{" "}
+            <a href="/pricing" style={s.link}>View all tiers</a>
+          </p>
+        </>
+      ) : (
+        <p style={s.hint}>
+          Something went wrong. Please <a href="/signup" style={s.link}>try again</a> or
+          contact support.
+        </p>
+      )}
 
-        <div style={s.ctas}>
-          <a href="/docs" style={s.ctaPrimary}>View API Docs</a>
-          <a href="/" style={s.ctaSecondary}>Home</a>
-        </div>
+      <div style={s.ctas}>
+        <a href="/docs" style={s.ctaPrimary}>View API Docs</a>
+        <a href="/" style={s.ctaSecondary}>Home</a>
       </div>
+    </div>
+  );
+}
+
+export default function AuthSuccessPage() {
+  return (
+    <div style={s.page}>
+      <Suspense fallback={<div style={s.card}><p style={s.hint}>Loading...</p></div>}>
+        <AuthSuccessContent />
+      </Suspense>
     </div>
   );
 }
