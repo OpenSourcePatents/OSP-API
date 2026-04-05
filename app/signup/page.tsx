@@ -70,6 +70,12 @@ export default function SignupPage() {
             <p style={styles.hint}>
               A confirmation email has been sent to <strong>{email}</strong>.
             </p>
+            <button
+              onClick={() => { setApiKey(""); setEmail(""); }}
+              style={styles.closeButton}
+            >
+              Done
+            </button>
           </div>
         )}
       </div>
@@ -177,5 +183,16 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "0.85rem",
     margin: 0,
     lineHeight: 1.5,
+  },
+  closeButton: {
+    marginTop: "0.75rem",
+    padding: "0.6rem 1rem",
+    borderRadius: 8,
+    border: "1px solid #2a2a3a",
+    backgroundColor: "transparent",
+    color: "#888",
+    fontSize: "0.9rem",
+    cursor: "pointer",
+    width: "100%",
   },
 };
