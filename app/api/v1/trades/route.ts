@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryCongress } from "@/lib/supabase";
 import { validateApiKey } from "@/lib/auth";
 import { paginated, err, options } from "@/lib/response";
 
@@ -17,26 +17,26 @@ export async function GET(request: NextRequest) {
   const per_page = Math.min(100, Math.max(1, parseInt(sp.get("per_page") || "50")));
   const offset = (page - 1) * per_page;
 
-  let query = supabase
-    .from("trades")
-    .select(
-      "bioguide_id, member_name, chamber, party, state, transaction_date, ticker, asset_description, trade_type, amount_range, owner, source",
-      { count: "exact" }
-    );
+  const eq: Record<string, string> = {};
+  if (chamber) eq.chamber = chamber;
+  if (party) eq.party = party;
 
-  if (ticker) query = query.ilike("ticker", ticker);
-  if (chamber) query = query.eq("chamber", chamber);
-  if (party) query = query.eq("party", party);
-  if (start_date) query = query.gte("transaction_date", start_date);
-  if (end_date) query = query.lte("transaction_date", end_date);
-
-  const { data, count, error: dbError } = await query
-    .order("transaction_date", { ascending: false })
-    .range(offset, offset + per_page - 1);
+  const { data, count, error: dbError } = await queryCongress("trades", {
+    select: "bioguide_id,member_name,chamber,party,state,transaction_date,ticker,asset_description,trade_type,amount_range,owner,source",
+    eq,
+    ilike: ticker ? { ticker } : undefined,
+    gte: start_date ? { transaction_date: start_date } : undefined,
+    lte: end_date ? { transaction_date: end_date } : undefined,
+    order: "transaction_date",
+    ascending: false,
+    limit: per_page,
+    offset,
+    count: true,
+  });
 
   if (dbError) return err("Database error", 500);
 
-  return paginated(data || [], page, per_page, count || 0);
+  return paginated((data as Record<string, unknown>[]) || [], page, per_page, count || 0);
 }
 
 export { options as OPTIONS };

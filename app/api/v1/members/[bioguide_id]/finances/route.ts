@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryCongress } from "@/lib/supabase";
 import { validateApiKey } from "@/lib/auth";
 import { ok, err, options } from "@/lib/response";
 
@@ -12,13 +12,11 @@ export async function GET(
 
   const { bioguide_id } = await params;
 
-  const { data, error: dbError } = await supabase
-    .from("finances")
-    .select(
-      "total_raised, total_spent, cash_on_hand, fec_candidate_id, cycle, top_industries"
-    )
-    .eq("bioguide_id", bioguide_id)
-    .single();
+  const { data, error: dbError } = await queryCongress("finances", {
+    select: "total_raised,total_spent,cash_on_hand,fec_candidate_id,cycle,top_industries",
+    eq: { bioguide_id },
+    single: true,
+  });
 
   if (dbError || !data) return err("Financial data not found", 404);
 

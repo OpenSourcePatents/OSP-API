@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryCongress } from "@/lib/supabase";
 import { validateApiKey } from "@/lib/auth";
 import { ok, err, options } from "@/lib/response";
 
@@ -12,11 +12,11 @@ export async function GET(
 
   const { bioguide_id } = await params;
 
-  const { data: member, error: dbError } = await supabase
-    .from("members")
-    .select("*, trade_count, travel_count, donor_count, vote_count")
-    .eq("bioguide_id", bioguide_id)
-    .single();
+  const { data: member, error: dbError } = await queryCongress("members", {
+    select: "*,trade_count,travel_count,donor_count,vote_count",
+    eq: { bioguide_id },
+    single: true,
+  });
 
   if (dbError || !member) return err("Member not found", 404);
 

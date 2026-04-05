@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryCongress } from "@/lib/supabase";
 import { validateApiKey } from "@/lib/auth";
 import { paginated, err, options } from "@/lib/response";
 
@@ -17,22 +17,20 @@ export async function GET(
   const sponsored_only = sp.get("sponsored_only") === "true";
   const offset = (page - 1) * per_page;
 
-  let query = supabase
-    .from("bills")
-    .select(
-      "bill_id, title, introduced_date, status, sponsor_type, alec_similarity_score, cosponsor_count",
-      { count: "exact" }
-    )
-    .eq("bioguide_id", bioguide_id);
+  const eq: Record<string, string> = { bioguide_id };
+  if (sponsored_only) eq.sponsor_type = "sponsor";
 
-  if (sponsored_only) query = query.eq("sponsor_type", "sponsor");
-
-  const { data, count, error: dbError } = await query
-    .range(offset, offset + per_page - 1);
+  const { data, count, error: dbError } = await queryCongress("bills", {
+    select: "bill_id,title,introduced_date,status,sponsor_type,alec_similarity_score,cosponsor_count",
+    eq,
+    limit: per_page,
+    offset,
+    count: true,
+  });
 
   if (dbError) return err("Database error", 500);
 
-  return paginated(data || [], page, per_page, count || 0);
+  return paginated((data as Record<string, unknown>[]) || [], page, per_page, count || 0);
 }
 
 export { options as OPTIONS };

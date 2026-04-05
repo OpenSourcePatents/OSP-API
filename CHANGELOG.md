@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0] - 2026-04-05
+### Changed
+- Replaced @supabase/supabase-js createClient with direct REST API fetch calls for sb_secret_ key compatibility
+- lib/supabase.ts now exports queryOSPDB(), insertOSPDB(), rpcOSPDB(), queryCongress() using raw PostgREST fetch
+- lib/auth.ts updated to use queryOSPDB instead of supabase client
+- All 13 API routes updated to use queryCongress/queryOSPDB
+- Separated dual-DB env vars: CONGRESS_SUPABASE_URL + CONGRESS_SUPABASE_SERVICE_KEY for congressional data
+- .env.local.example updated with new env vars
+
 ## [0.5.0] - 2026-04-05
 ### Added
 - Landing page with hero, feature grid, code sample, CongressWatch showcase, and endpoint overview

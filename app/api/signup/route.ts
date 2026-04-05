@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryOSPDB, insertOSPDB } from "@/lib/supabase";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -52,25 +52,25 @@ export async function POST(request: NextRequest) {
   }
 
   // Check for existing key
-  const { data: existing } = await supabase
-    .from("api_keys")
-    .select("key")
-    .eq("email", email)
-    .single();
+  const { data: existing } = await queryOSPDB<{ key: string }>("api_keys", {
+    select: "key",
+    eq: { email },
+    single: true,
+  });
 
   if (existing) {
-    // Re-send the confirmation email with existing key
+    const row = existing as { key: string };
     try {
-      await sendConfirmationEmail(email, existing.key);
+      await sendConfirmationEmail(email, row.key);
     } catch {
       // Non-fatal: key still returned
     }
-    return NextResponse.json({ success: true, key: existing.key });
+    return NextResponse.json({ success: true, key: row.key });
   }
 
   const apiKey = generateApiKey();
 
-  const { error: insertError } = await supabase.from("api_keys").insert({
+  const { error: insertError } = await insertOSPDB("api_keys", {
     key: apiKey,
     email,
     tier: "free",

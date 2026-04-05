@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryCongress } from "@/lib/supabase";
 import { validateApiKey } from "@/lib/auth";
 import { paginated, err, options } from "@/lib/response";
 
@@ -18,24 +18,23 @@ export async function GET(
   const trade_type = sp.get("trade_type");
   const offset = (page - 1) * per_page;
 
-  let query = supabase
-    .from("trades")
-    .select(
-      "transaction_date, ticker, asset_description, trade_type, amount_range, owner, source",
-      { count: "exact" }
-    )
-    .eq("bioguide_id", bioguide_id);
+  const eq: Record<string, string> = { bioguide_id };
+  if (trade_type) eq.trade_type = trade_type;
 
-  if (ticker) query = query.ilike("ticker", ticker);
-  if (trade_type) query = query.eq("trade_type", trade_type);
-
-  const { data, count, error: dbError } = await query
-    .order("transaction_date", { ascending: false })
-    .range(offset, offset + per_page - 1);
+  const { data, count, error: dbError } = await queryCongress("trades", {
+    select: "transaction_date,ticker,asset_description,trade_type,amount_range,owner,source",
+    eq,
+    ilike: ticker ? { ticker } : undefined,
+    order: "transaction_date",
+    ascending: false,
+    limit: per_page,
+    offset,
+    count: true,
+  });
 
   if (dbError) return err("Database error", 500);
 
-  return paginated(data || [], page, per_page, count || 0);
+  return paginated((data as Record<string, unknown>[]) || [], page, per_page, count || 0);
 }
 
 export { options as OPTIONS };

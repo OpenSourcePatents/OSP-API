@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryCongress } from "@/lib/supabase";
 import { validateApiKey } from "@/lib/auth";
 import { ok, err, options } from "@/lib/response";
 
@@ -12,13 +12,11 @@ export async function GET(
 
   const { bioguide_id } = await params;
 
-  const { data, error: dbError } = await supabase
-    .from("scores")
-    .select(
-      "overall_score, voting_anomaly_score, financial_anomaly_score, trade_timing_score, donor_concentration_score, bill_similarity_score, travel_pattern_score"
-    )
-    .eq("bioguide_id", bioguide_id)
-    .single();
+  const { data, error: dbError } = await queryCongress("scores", {
+    select: "overall_score,voting_anomaly_score,financial_anomaly_score,trade_timing_score,donor_concentration_score,bill_similarity_score,travel_pattern_score",
+    eq: { bioguide_id },
+    single: true,
+  });
 
   if (dbError || !data) return err("Score data not found", 404);
 

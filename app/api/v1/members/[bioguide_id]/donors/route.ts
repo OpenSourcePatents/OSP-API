@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { queryCongress } from "@/lib/supabase";
 import { validateApiKey } from "@/lib/auth";
 import { paginated, err, options } from "@/lib/response";
 
@@ -16,19 +16,19 @@ export async function GET(
   const per_page = Math.min(100, Math.max(1, parseInt(sp.get("per_page") || "50")));
   const offset = (page - 1) * per_page;
 
-  const { data, count, error: dbError } = await supabase
-    .from("donors")
-    .select(
-      "contributor_name, employer, occupation, amount, date",
-      { count: "exact" }
-    )
-    .eq("bioguide_id", bioguide_id)
-    .order("amount", { ascending: false })
-    .range(offset, offset + per_page - 1);
+  const { data, count, error: dbError } = await queryCongress("donors", {
+    select: "contributor_name,employer,occupation,amount,date",
+    eq: { bioguide_id },
+    order: "amount",
+    ascending: false,
+    limit: per_page,
+    offset,
+    count: true,
+  });
 
   if (dbError) return err("Database error", 500);
 
-  return paginated(data || [], page, per_page, count || 0);
+  return paginated((data as Record<string, unknown>[]) || [], page, per_page, count || 0);
 }
 
 export { options as OPTIONS };
