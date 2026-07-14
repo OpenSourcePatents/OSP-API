@@ -1,7 +1,8 @@
 "use client";
 
 import { Suspense, useState, FormEvent, useEffect, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import { authClient } from "@/lib/neon-auth-client";
 
 // --- SVG icons ---
 
@@ -61,8 +62,6 @@ function getStrength(password: string): { label: string; color: string; pct: num
   return { label: "Strong", color: "#22c55e", pct: 100 };
 }
 
-// --- Password input component ---
-
 function PasswordInput({
   value,
   onChange,
@@ -90,18 +89,22 @@ function PasswordInput({
   );
 }
 
-// --- OAuth helper ---
-
-function oauthRedirect(provider: "google" | "github") {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const redirectTo = `${window.location.origin}/api/auth/confirm`;
-  window.location.href = `${supabaseUrl}/auth/v1/authorize?provider=${provider}&redirect_to=${encodeURIComponent(redirectTo)}`;
+function errMessage(e: unknown): string {
+  if (e && typeof e === "object" && "message" in e) {
+    return String((e as { message: unknown }).message);
+  }
+  return "Something went wrong. Please try again.";
 }
 
 // --- Main form ---
 
-function SignupForm() {
+type Mode = "signup" | "signin";
+
+function AuthForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const [mode, setMode] = useState<Mode>("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -111,17 +114,27 @@ function SignupForm() {
 
   useEffect(() => {
     const err = searchParams.get("error");
-    if (err === "missing_token") setError("Invalid confirmation link.");
-    else if (err === "invalid_token") setError("Confirmation link expired or invalid. Please sign up again.");
-    else if (err === "no_email") setError("Could not verify email. Please try again.");
-    else if (err === "key_generation_failed") setError("Failed to generate API key. Please contact support.");
+    if (err) setError("Sign-in failed. Please try again.");
   }, [searchParams]);
 
   const ruleResults = useMemo(() => PW_RULES.map((r) => ({ ...r, met: r.test(password) })), [password]);
   const allRulesMet = ruleResults.every((r) => r.met);
   const passwordsMatch = password.length > 0 && password === confirm;
-  const canSubmit = email.length > 0 && allRulesMet && passwordsMatch && !loading;
   const strength = useMemo(() => getStrength(password), [password]);
+
+  const canSubmit =
+    mode === "signup"
+      ? email.length > 0 && allRulesMet && passwordsMatch && !loading
+      : email.length > 0 && password.length > 0 && !loading;
+
+  async function social(provider: "google" | "github") {
+    setError("");
+    try {
+      await authClient.signIn.social({ provider, callbackURL: "/auth/success" });
+    } catch (e) {
+      setError(errMessage(e));
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -131,19 +144,19 @@ function SignupForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Something went wrong");
-        return;
+      if (mode === "signup") {
+        await authClient.signUp.email({ email, password, name: email });
+        // Neon Auth sends the verification email. The key is only minted once the
+        // address is verified, so we can't hand one out yet.
+        setMessage(
+          "Check your email to verify your address. Once verified, sign in and your API key will be issued.",
+        );
+      } else {
+        await authClient.signIn.email({ email, password });
+        router.push("/auth/success");
       }
-      setMessage(data.message);
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (err) {
+      setError(errMessage(err));
     } finally {
       setLoading(false);
     }
@@ -153,38 +166,44 @@ function SignupForm() {
     <div style={s.card}>
       <h1 style={s.title}>OSP Civic Data API</h1>
       <p style={s.subtitle}>
-        Create an account to get your free API key. You&apos;ll need to verify
-        your email before the key is generated.
+        {mode === "signup"
+          ? "Create an account to get your free API key. You'll need to verify your email first."
+          : "Sign in to retrieve your API key."}
       </p>
 
       {message ? (
         <div style={s.successBox}>
           <p style={s.successLabel}>Almost there!</p>
           <p style={s.successText}>{message}</p>
-          <button onClick={() => { setMessage(""); setEmail(""); setPassword(""); setConfirm(""); }} style={s.ghost}>
-            Start over
+          <button
+            onClick={() => {
+              setMessage("");
+              setMode("signin");
+              setPassword("");
+              setConfirm("");
+            }}
+            style={s.ghost}
+          >
+            Go to sign in
           </button>
         </div>
       ) : (
         <>
-          {/* OAuth buttons */}
           <div style={s.oauthGroup}>
-            <button type="button" onClick={() => oauthRedirect("google")} style={s.oauthBtn}>
+            <button type="button" onClick={() => social("google")} style={s.oauthBtn}>
               <GoogleIcon /> Continue with Google
             </button>
-            <button type="button" onClick={() => oauthRedirect("github")} style={s.oauthBtnDark}>
+            <button type="button" onClick={() => social("github")} style={s.oauthBtnDark}>
               <GitHubIcon /> Continue with GitHub
             </button>
           </div>
 
-          {/* Divider */}
           <div style={s.orDivider}>
             <span style={s.orLine} />
             <span style={s.orText}>or continue with email</span>
             <span style={s.orLine} />
           </div>
 
-          {/* Email/password form */}
           <form onSubmit={handleSubmit} style={s.form}>
             <input
               type="email"
@@ -197,39 +216,61 @@ function SignupForm() {
 
             <PasswordInput value={password} onChange={setPassword} placeholder="Password" />
 
-            {/* Strength bar */}
-            {password.length > 0 && (
-              <div style={s.strengthWrap}>
-                <div style={s.strengthTrack}>
-                  <div style={{ ...s.strengthFill, width: `${strength.pct}%`, backgroundColor: strength.color }} />
+            {mode === "signup" && password.length > 0 && (
+              <>
+                <div style={s.strengthWrap}>
+                  <div style={s.strengthTrack}>
+                    <div style={{ ...s.strengthFill, width: `${strength.pct}%`, backgroundColor: strength.color }} />
+                  </div>
+                  <span style={{ ...s.strengthLabel, color: strength.color }}>{strength.label}</span>
                 </div>
-                <span style={{ ...s.strengthLabel, color: strength.color }}>{strength.label}</span>
-              </div>
+
+                <ul style={s.ruleList}>
+                  {ruleResults.map((r) => (
+                    <li key={r.key} style={{ ...s.ruleItem, color: r.met ? "#22c55e" : "#555" }}>
+                      <span style={s.ruleIcon}>{r.met ? "✓" : "✗"}</span> {r.label}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
 
-            {/* Requirements checklist */}
-            {password.length > 0 && (
-              <ul style={s.ruleList}>
-                {ruleResults.map((r) => (
-                  <li key={r.key} style={{ ...s.ruleItem, color: r.met ? "#22c55e" : "#555" }}>
-                    <span style={s.ruleIcon}>{r.met ? "\u2713" : "\u2717"}</span> {r.label}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <PasswordInput value={confirm} onChange={setConfirm} placeholder="Confirm password" />
-
-            {/* Match indicator */}
-            {confirm.length > 0 && !passwordsMatch && (
-              <p style={s.mismatch}>Passwords do not match</p>
+            {mode === "signup" && (
+              <>
+                <PasswordInput value={confirm} onChange={setConfirm} placeholder="Confirm password" />
+                {confirm.length > 0 && !passwordsMatch && (
+                  <p style={s.mismatch}>Passwords do not match</p>
+                )}
+              </>
             )}
 
             <button type="submit" disabled={!canSubmit} style={{ ...s.button, opacity: canSubmit ? 1 : 0.45 }}>
-              {loading ? "Creating account..." : "Sign Up"}
+              {loading
+                ? mode === "signup"
+                  ? "Creating account..."
+                  : "Signing in..."
+                : mode === "signup"
+                  ? "Sign Up"
+                  : "Sign In"}
             </button>
             {error && <p style={s.error}>{error}</p>}
           </form>
+
+          <p style={s.switchNote}>
+            {mode === "signup" ? "Already have an account? " : "Need an account? "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signup" ? "signin" : "signup");
+                setError("");
+                setPassword("");
+                setConfirm("");
+              }}
+              style={s.linkBtn}
+            >
+              {mode === "signup" ? "Sign in" : "Sign up"}
+            </button>
+          </p>
         </>
       )}
 
@@ -251,7 +292,7 @@ export default function SignupPage() {
   return (
     <div style={s.page}>
       <Suspense fallback={<div style={s.card}><p style={s.subtitle}>Loading...</p></div>}>
-        <SignupForm />
+        <AuthForm />
       </Suspense>
     </div>
   );
@@ -291,7 +332,6 @@ const s: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
   },
 
-  // OAuth
   oauthGroup: {
     display: "flex",
     flexDirection: "column" as const,
@@ -327,7 +367,6 @@ const s: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
 
-  // Or divider
   orDivider: {
     display: "flex",
     alignItems: "center",
@@ -347,7 +386,6 @@ const s: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap" as const,
   },
 
-  // Form
   form: {
     display: "flex",
     flexDirection: "column" as const,
@@ -380,7 +418,6 @@ const s: Record<string, React.CSSProperties> = {
     alignItems: "center",
   },
 
-  // Strength
   strengthWrap: {
     display: "flex",
     alignItems: "center",
@@ -405,7 +442,6 @@ const s: Record<string, React.CSSProperties> = {
     textAlign: "right" as const,
   },
 
-  // Requirements
   ruleList: {
     listStyle: "none",
     margin: 0,
@@ -425,14 +461,12 @@ const s: Record<string, React.CSSProperties> = {
     marginRight: 2,
   },
 
-  // Match
   mismatch: {
     color: "#ef4444",
     fontSize: "0.75rem",
     margin: 0,
   },
 
-  // Button
   button: {
     padding: "0.75rem 1rem",
     borderRadius: 8,
@@ -475,6 +509,22 @@ const s: Record<string, React.CSSProperties> = {
     backgroundColor: "transparent",
     color: "#888",
     fontSize: "0.85rem",
+    cursor: "pointer",
+  },
+  switchNote: {
+    color: "#666",
+    fontSize: "0.85rem",
+    textAlign: "center" as const,
+    marginTop: "1rem",
+    marginBottom: 0,
+  },
+  linkBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    color: "#3b82f6",
+    fontSize: "0.85rem",
+    fontWeight: 600,
     cursor: "pointer",
   },
   divider: {

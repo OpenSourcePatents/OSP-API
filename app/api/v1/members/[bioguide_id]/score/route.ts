@@ -1,26 +1,38 @@
 import { NextRequest } from "next/server";
-import { queryCongress } from "@/lib/supabase";
+import { getMembers, getMemberDetail } from "@/lib/congress";
+import { computeScore } from "@/lib/scoring";
 import { validateApiKey } from "@/lib/auth";
 import { ok, err, options } from "@/lib/response";
 
+/**
+ * Anomaly score with its six-component breakdown.
+ *
+ * CongressWatch stores only the final integer, so the components are recomputed
+ * here from the same inputs its pipeline used. See lib/scoring.ts.
+ */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ bioguide_id: string }> }
+  ctx: { params: Promise<{ bioguide_id: string }> },
 ) {
   const auth = await validateApiKey(request);
-  if (!auth.valid) return err(auth.error!, 401);
+  if (!auth.valid) return err(auth.error!, auth.status ?? 401);
 
-  const { bioguide_id } = await params;
+  const { bioguide_id } = await ctx.params;
 
-  const { data, error: dbError } = await queryCongress("scores", {
-    select: "overall_score,voting_anomaly_score,financial_anomaly_score,trade_timing_score,donor_concentration_score,bill_similarity_score,travel_pattern_score",
-    eq: { bioguide_id },
-    single: true,
-  });
+  let members, detail;
+  try {
+    [members, detail] = await Promise.all([
+      getMembers(),
+      getMemberDetail(bioguide_id),
+    ]);
+  } catch {
+    return err("Upstream data unavailable", 502);
+  }
 
-  if (dbError || !data) return err("Score data not found", 404);
+  const member = members.find((m) => m.id === bioguide_id);
+  if (!member) return err("Member not found", 404);
 
-  return ok(data);
+  return ok({ bioguide_id, name: member.name, ...computeScore(member, detail) });
 }
 
 export { options as OPTIONS };

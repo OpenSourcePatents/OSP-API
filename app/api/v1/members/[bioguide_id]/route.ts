@@ -1,26 +1,28 @@
 import { NextRequest } from "next/server";
-import { queryCongress } from "@/lib/supabase";
+import { getMemberDetail } from "@/lib/congress";
 import { validateApiKey } from "@/lib/auth";
 import { ok, err, options } from "@/lib/response";
 
+/** The full member vault, served as CongressWatch stores it. */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ bioguide_id: string }> }
+  ctx: { params: Promise<{ bioguide_id: string }> },
 ) {
   const auth = await validateApiKey(request);
-  if (!auth.valid) return err(auth.error!, 401);
+  if (!auth.valid) return err(auth.error!, auth.status ?? 401);
 
-  const { bioguide_id } = await params;
+  const { bioguide_id } = await ctx.params;
 
-  const { data: member, error: dbError } = await queryCongress("members", {
-    select: "*,trade_count,travel_count,donor_count,vote_count",
-    eq: { bioguide_id },
-    single: true,
-  });
+  let detail;
+  try {
+    detail = await getMemberDetail(bioguide_id);
+  } catch {
+    return err("Upstream data unavailable", 502);
+  }
 
-  if (dbError || !member) return err("Member not found", 404);
+  if (!detail) return err("Member not found", 404);
 
-  return ok(member);
+  return ok(detail);
 }
 
 export { options as OPTIONS };
