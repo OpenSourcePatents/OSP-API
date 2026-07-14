@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.0] - 2026-07-14
+### Added — "Arcade terminal" redesign of all public pages
+- Reskinned landing, docs, pricing, signup, and auth-success pages to a dark neon aesthetic
+  (blue `#3b82f6` accent) from the Claude Design project: matrix-grid + vignette + scanline
+  overlays, neon-flicker titles, a live header clock, and card chrome with LIVE-dot + tag bars.
+- `app/globals.css` — font `@import` (Oxanium / IBM Plex Mono / Barlow), keyframes, hover/focus
+  utility classes, and a `prefers-reduced-motion` guard that stills the animated chrome.
+- `lib/theme.ts` — shared color + font tokens. `components/Chrome.tsx` — shared shell (overlays,
+  sticky header with live clock + route-aware nav, footer) wired into the layout.
+  `components/ui.tsx` — NeonTitle, Card, CardHeaderBar, TagPill, StatusDot, Eyebrow.
+- `public/osp-logo.jpg` for the header. `favicon.ico` referenced in the layout (dropped in separately).
+
+### Note
+- All page logic preserved: signup keeps the full Neon Auth flow and password-strength meter;
+  auth-success keeps the key-mint-over-session-cookie fetch + copy. Docs keeps full 13-endpoint
+  coverage. Rate-limit copy reads 429 (the real status), not the mockup's 401.
+
 ## [1.0.0] - 2026-07-14
 ### Changed — BREAKING: Supabase removed entirely; both databases replaced
 The Supabase projects backing this API were deleted. Both halves have been rebuilt on new
