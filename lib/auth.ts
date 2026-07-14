@@ -1,46 +1,60 @@
-import { queryOSPDB, rpcOSPDB } from "./supabase";
-import { rateLimiters, getTierLimitLabel } from "./redis";
+import { eq, sql } from "drizzle-orm";
+import { db } from "./db";
+import { apiKeys } from "./schema";
+import { limitRequest, getTierLimitLabel } from "./redis";
 
 interface AuthResult {
   valid: boolean;
   key_id?: string;
   tier?: string;
   error?: string;
+  /** HTTP status to return when invalid. 401 for auth failures, 429 when limited. */
+  status?: number;
 }
 
 export async function validateApiKey(request: Request): Promise<AuthResult> {
-  const apiKey = request.headers.get("X-API-Key");
+  const key = request.headers.get("X-API-Key");
 
-  if (!apiKey) {
-    return { valid: false, error: "Missing X-API-Key header" };
+  if (!key) {
+    return { valid: false, error: "Missing X-API-Key header", status: 401 };
   }
 
-  const { data: keyRow, error: dbError } = await queryOSPDB<{ id: string; tier: string }>(
-    "api_keys",
-    {
-      select: "id,tier",
-      eq: { key: apiKey },
-      single: true,
-    }
-  );
+  const [row] = await db
+    .select({ id: apiKeys.id, tier: apiKeys.tier })
+    .from(apiKeys)
+    .where(eq(apiKeys.key, key))
+    .limit(1);
 
-  if (dbError || !keyRow) {
-    return { valid: false, error: "Invalid API key" };
+  if (!row) {
+    return { valid: false, error: "Invalid API key", status: 401 };
   }
 
-  const row = keyRow as { id: string; tier: string };
   const tier = row.tier || "free";
 
-  // Admin tier bypasses rate limiting
+  // Admin tier bypasses rate limiting.
   if (tier !== "admin") {
-    const limiter = rateLimiters[tier as keyof typeof rateLimiters] || rateLimiters.free;
-    const { success } = await limiter.limit(row.id);
-    if (!success) {
-      return { valid: false, error: `Rate limit exceeded (${getTierLimitLabel(tier)})` };
+    const { allowed } = await limitRequest(tier, row.id);
+    if (!allowed) {
+      // 429, not 401 — the key is valid, the caller just needs to back off.
+      return {
+        valid: false,
+        error: `Rate limit exceeded (${getTierLimitLabel(tier)})`,
+        status: 429,
+      };
     }
   }
 
-  await rpcOSPDB("increment_requests_today", { key_id: row.id });
+  // Replaces the `increment_requests_today` Supabase RPC. Not awaited: usage
+  // accounting must not add a round-trip to every API response, and a lost
+  // increment is cheaper than a slower request.
+  void db
+    .update(apiKeys)
+    .set({
+      requestsToday: sql`${apiKeys.requestsToday} + 1`,
+      lastUsedAt: new Date(),
+    })
+    .where(eq(apiKeys.id, row.id))
+    .catch(() => {});
 
   return { valid: true, key_id: row.id, tier };
 }

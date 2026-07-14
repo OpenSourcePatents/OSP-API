@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.0] - 2026-07-14
+### Changed — BREAKING: Supabase removed entirely; both databases replaced
+The Supabase projects backing this API were deleted. Both halves have been rebuilt on new
+infrastructure, and the response contract now uses CongressWatch's native field names.
+
+- **Congressional data → CongressWatch static JSON.** Deleted `lib/supabase.ts` (the hand-rolled
+  PostgREST fetch wrapper) and `queryCongress()`. `lib/congress.ts` now reads
+  `congresswatch.vercel.app/data/*.json` — already public, CORS-enabled, and CDN-cached with a
+  1h `s-maxage`. No database in the data path.
+- **API keys + accounts → Neon Postgres.** `lib/db.ts` (Drizzle + node-postgres, module-scope pool
+  with `attachDatabasePool` for Vercel Fluid compute) and `lib/schema.ts` replace `queryOSPDB()` /
+  `insertOSPDB()`. The `increment_requests_today` Supabase RPC is now a plain SQL UPDATE, no longer
+  awaited on the hot path.
+- **Auth → Neon Auth (Managed BetterAuth)** replaces Supabase GoTrue. `/api/auth/[...path]` proxies
+  sign-up, sign-in, OAuth, and email verification. Deleted `/api/signup` and `/api/auth/confirm`.
+- **Response contract now uses native CongressWatch field names.** Renames on trades:
+  `trade_type` → `type`, `amount_range` → `amount` (a bracket STRING like `"$15,001 - $50,000"`,
+  and null on ~231 rows). Donors: `contributor_name`/`contributor_employer` → `name`/`employer`
+  (the array is `top_donors_list`). Bills: `alec_min_score` (0-100) → `min_alec_similarity` (0-1).
+  `cash_on_hand` is a preformatted STRING, not a number. `district` is a string, `""` for senators.
+
+### Added
+- `GET /api/v1/members/{id}/score` now returns the **six-component breakdown**, not just the total.
+  `lib/scoring.ts` ports CongressWatch's `compute_score()` (`fetch_finance.py:312`) to TypeScript —
+  verified against the Python original on live data, including Python's banker's rounding.
+  Response includes `stored`, recomputed `total`, and `drift`, because CongressWatch recomputes the
+  score only in its finance job while votes/trades/travel refresh on separate schedules, so a
+  stored score can legitimately lag its own inputs.
+- `lib/aggregate.ts` builds the cross-member index for `/v1/trades` and `/v1/bills` (6,833 trades,
+  5,296 bills), which exist only inside per-member detail files upstream. Cached 1h; ~1s cold,
+  ~240ms warm.
+- `/v1/members` gained `search`, `min_score`, and `sort` (`score|name|state|total_raised` × `asc|desc`).
+- `POST /api/keys` mints an API key for the verified signed-in user, idempotently.
+- Google OAuth via Neon Auth's shared dev app. **GitHub OAuth requires your own client
+  credentials** — Neon does not offer a shared GitHub app.
+
+### Fixed
+- The API key is no longer passed through a URL query parameter on `/auth/success`. It was landing
+  in browser history, referrer headers, and server logs. It is now fetched over the session cookie.
+
+### Removed
+- `@supabase/supabase-js` dependency, `lib/supabase.ts`, and all `SUPABASE_*` environment variables.
+
 ## [0.7.0] - 2026-04-05
 ### Added
 - Supabase Auth email verification -- users must confirm email before API key is generated

@@ -1,42 +1,62 @@
 import { NextRequest } from "next/server";
-import { queryCongress } from "@/lib/supabase";
+import { getIndex } from "@/lib/aggregate";
+import { paginate, parseDateAny } from "@/lib/congress";
 import { validateApiKey } from "@/lib/auth";
 import { paginated, err, options } from "@/lib/response";
 
+/** All disclosed trades across every member. */
 export async function GET(request: NextRequest) {
   const auth = await validateApiKey(request);
-  if (!auth.valid) return err(auth.error!, 401);
+  if (!auth.valid) return err(auth.error!, auth.status ?? 401);
 
   const sp = request.nextUrl.searchParams;
   const ticker = sp.get("ticker");
+  const type = sp.get("type");
   const chamber = sp.get("chamber");
   const party = sp.get("party");
+  const state = sp.get("state");
   const start_date = sp.get("start_date");
   const end_date = sp.get("end_date");
   const page = Math.max(1, parseInt(sp.get("page") || "1"));
-  const per_page = Math.min(100, Math.max(1, parseInt(sp.get("per_page") || "50")));
-  const offset = (page - 1) * per_page;
+  const per_page = Math.min(
+    100,
+    Math.max(1, parseInt(sp.get("per_page") || "50")),
+  );
 
-  const eq: Record<string, string> = {};
-  if (chamber) eq.chamber = chamber;
-  if (party) eq.party = party;
+  let index;
+  try {
+    index = await getIndex();
+  } catch {
+    return err("Upstream data unavailable", 502);
+  }
 
-  const { data, count, error: dbError } = await queryCongress("trades", {
-    select: "bioguide_id,member_name,chamber,party,state,transaction_date,ticker,asset_description,trade_type,amount_range,owner,source",
-    eq,
-    ilike: ticker ? { ticker } : undefined,
-    gte: start_date ? { transaction_date: start_date } : undefined,
-    lte: end_date ? { transaction_date: end_date } : undefined,
-    order: "transaction_date",
-    ascending: false,
-    limit: per_page,
-    offset,
-    count: true,
+  const eq = (a: string | undefined, b: string) =>
+    (a ?? "").toLowerCase() === b.toLowerCase();
+
+  let rows = index.trades.filter((t) => {
+    if (ticker && !eq(t.ticker, ticker)) return false;
+    if (type && !eq(t.type, type)) return false;
+    if (chamber && !eq(t.chamber, chamber)) return false;
+    if (party && !eq(t.party, party)) return false;
+    if (state && !eq(t.state, state)) return false;
+
+    if (start_date || end_date) {
+      const d = parseDateAny(t.transaction_date);
+      if (!d) return false;
+      if (start_date && d < parseDateAny(start_date)) return false;
+      if (end_date && d > parseDateAny(end_date)) return false;
+    }
+    return true;
   });
 
-  if (dbError) return err("Database error", 500);
+  rows = [...rows].sort((a, b) =>
+    parseDateAny(b.transaction_date).localeCompare(
+      parseDateAny(a.transaction_date),
+    ),
+  );
 
-  return paginated((data as Record<string, unknown>[]) || [], page, per_page, count || 0);
+  const { rows: pageRows, total } = paginate(rows, page, per_page);
+  return paginated(pageRows, page, per_page, total);
 }
 
 export { options as OPTIONS };
