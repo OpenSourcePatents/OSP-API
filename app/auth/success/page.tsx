@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { C, F, accent, green } from "@/lib/theme";
+import { StatusDot, TagPill } from "@/components/ui";
 
 type State =
   | { status: "loading" }
@@ -32,17 +35,9 @@ export default function AuthSuccessPage() {
         }
 
         const d = body.data;
-        setState({
-          status: "ok",
-          key: d.key,
-          email: d.email,
-          tier: d.tier,
-          created: d.created,
-        });
+        setState({ status: "ok", key: d.key, email: d.email, tier: d.tier, created: d.created });
       } catch {
-        if (!cancelled) {
-          setState({ status: "error", message: "Network error. Please try again." });
-        }
+        if (!cancelled) setState({ status: "error", message: "Network error. Please try again." });
       }
     })();
 
@@ -57,177 +52,176 @@ export default function AuthSuccessPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      /* clipboard unavailable — the key is on screen anyway */
+      /* clipboard unavailable — key is on screen anyway */
     }
   }
 
-  return (
-    <div style={s.page}>
-      <div style={s.card}>
-        {state.status === "loading" && (
-          <>
-            <h1 style={s.title}>Issuing your API key…</h1>
-            <p style={s.hint}>One moment.</p>
-          </>
-        )}
-
-        {state.status === "error" && (
-          <>
-            <h1 style={s.title}>
-              {state.needsVerification ? "Verify your email" : "Something went wrong"}
-            </h1>
-            <p style={s.hint}>{state.message}</p>
-            <p style={s.hint}>
-              {state.needsVerification ? (
-                <>Check your inbox for the verification link, then reload this page.</>
-              ) : (
-                <>
-                  Please <a href="/signup" style={s.link}>try again</a> or contact support.
-                </>
-              )}
-            </p>
-            <div style={s.ctas}>
-              <a href="/signup" style={s.ctaSecondary}>Back to sign in</a>
-            </div>
-          </>
-        )}
-
-        {state.status === "ok" && (
-          <>
-            <h1 style={s.title}>
-              {state.created ? "You're all set" : "Welcome back"}
-            </h1>
-
-            <p style={s.successLabel}>Your API key:</p>
-            <pre style={s.keyBox}>{state.key}</pre>
-
-            <button onClick={() => copy(state.key)} style={s.copyBtn}>
-              {copied ? "Copied" : "Copy key"}
-            </button>
-
-            <p style={s.hint}>Pass it as a header with every request:</p>
-            <pre style={s.codeBox}>X-API-Key: {state.key}</pre>
-
-            {state.created && (
-              <p style={s.hint}>
-                A copy has been emailed to <strong>{state.email}</strong>.
-              </p>
-            )}
-
-            <p style={s.hint}>
-              Tier: <strong>{state.tier}</strong>.{" "}
-              <a href="/pricing" style={s.link}>View all tiers</a>
-            </p>
-
-            <div style={s.ctas}>
-              <a href="/docs" style={s.ctaPrimary}>View API Docs</a>
-              <a href="/" style={s.ctaSecondary}>Home</a>
-            </div>
-          </>
-        )}
+  const shell = (header: React.ReactNode, body: React.ReactNode) => (
+    <div style={{ minHeight: "calc(100vh - 56px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 460, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
+        {header}
+        <div style={{ padding: "24px 20px" }}>{body}</div>
       </div>
     </div>
   );
+
+  const header = (dotColor: string, label: string, tag: string, tagColor: string) => (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 14px",
+        borderBottom: `1px solid ${C.border}`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <StatusDot color={dotColor} />
+        <span style={{ fontFamily: F.mono, fontSize: 9, color: dotColor === C.success ? green(0.7) : accent(0.7), letterSpacing: 1.5 }}>
+          {label}
+        </span>
+      </div>
+      <TagPill color={tagColor} borderColor={tagColor === C.success ? green(0.3) : C.border}>
+        {tag}
+      </TagPill>
+    </div>
+  );
+
+  const titleStyle: React.CSSProperties = {
+    fontFamily: F.display,
+    fontSize: 18,
+    fontWeight: 800,
+    color: C.white,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  };
+
+  if (state.status === "loading") {
+    return shell(
+      header(C.accent, "WORKING", "PENDING", C.muted),
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 12 }}>Issuing your API key…</h1>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted }}>One moment.</p>
+      </>,
+    );
+  }
+
+  if (state.status === "error") {
+    return shell(
+      header("#ef4444", "ERROR", "FAILED", "#ef4444"),
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 16 }}>{state.needsVerification ? "Verify your email" : "Something went wrong"}</h1>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 8 }}>{state.message}</p>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>
+          {state.needsVerification ? (
+            "Check your inbox for the verification link, then reload this page."
+          ) : (
+            <>
+              Please <Link href="/signup" style={link}>try again</Link> or contact support.
+            </>
+          )}
+        </p>
+        <Link href="/signup" className="dc-btn-ghost" style={ghostBtn}>
+          BACK TO SIGN IN
+        </Link>
+      </>,
+    );
+  }
+
+  // ok
+  return shell(
+    header(C.success, "KEY ISSUED", "SUCCESS", C.success),
+    <>
+      <h1 style={{ ...titleStyle, marginBottom: 16 }}>{state.created ? "You're all set" : "Welcome back"}</h1>
+
+      <p style={{ fontFamily: F.display, fontSize: 9, fontWeight: 600, letterSpacing: 1.5, color: C.success, textTransform: "uppercase", marginBottom: 6 }}>
+        YOUR API KEY
+      </p>
+      <div style={{ background: C.surfaceInk, border: `1px solid ${C.borderLight}`, borderRadius: 5, padding: 14, marginBottom: 8, overflowX: "auto" }}>
+        <code style={{ fontFamily: F.mono, fontSize: 13, color: C.text, wordBreak: "break-all" }}>{state.key}</code>
+      </div>
+      <button onClick={() => copy(state.key)} className="dc-copy" style={copyBtn}>
+        {copied ? "COPIED ✓" : "COPY KEY"}
+      </button>
+
+      <p style={{ fontFamily: F.display, fontSize: 9, fontWeight: 600, letterSpacing: 1.5, color: C.faint, textTransform: "uppercase", marginBottom: 6 }}>
+        USAGE
+      </p>
+      <div style={{ background: C.surfaceInk, border: `1px solid ${C.borderLight}`, borderRadius: 5, padding: 14, marginBottom: 20, overflowX: "auto" }}>
+        <pre style={{ fontFamily: F.mono, fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.5 }}>X-API-Key: {state.key}</pre>
+      </div>
+
+      {state.created && (
+        <p style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginBottom: 16, letterSpacing: 0.3 }}>
+          A copy has been emailed to <span style={{ color: C.muted }}>{state.email}</span>
+        </p>
+      )}
+      <p style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginBottom: 20, letterSpacing: 0.3 }}>
+        Tier: <span style={{ color: C.muted }}>{state.tier}</span> ·{" "}
+        <Link href="/pricing" style={{ color: C.accent, borderBottom: `1px dotted ${C.accent}`, textDecoration: "none" }}>
+          View all tiers
+        </Link>
+      </p>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <Link href="/docs" className="dc-btn-primary" style={primaryBtn}>
+          VIEW API DOCS →
+        </Link>
+        <Link href="/" className="dc-btn-ghost" style={ghostBtnInline}>
+          HOME
+        </Link>
+      </div>
+    </>,
+  );
 }
 
-const s: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    backgroundColor: "#0a0a0f",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "2rem",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-  },
-  card: {
-    maxWidth: 480,
-    width: "100%",
-    backgroundColor: "#12121a",
-    borderRadius: 12,
-    padding: "2.5rem",
-    border: "1px solid #1e1e2e",
-  },
-  title: {
-    color: "#fff",
-    fontSize: "1.5rem",
-    fontWeight: 700,
-    margin: "0 0 1rem",
-  },
-  successLabel: {
-    color: "#22c55e",
-    fontWeight: 600,
-    fontSize: "0.95rem",
-    margin: "0 0 0.25rem",
-  },
-  keyBox: {
-    backgroundColor: "#0a0a0f",
-    border: "1px solid #2a2a3a",
-    borderRadius: 8,
-    padding: "0.75rem 1rem",
-    color: "#e0e0e0",
-    fontSize: "0.8rem",
-    overflowX: "auto" as const,
-    margin: "0 0 0.5rem",
-    wordBreak: "break-all" as const,
-    whiteSpace: "pre-wrap" as const,
-  },
-  copyBtn: {
-    padding: "0.45rem 0.9rem",
-    borderRadius: 8,
-    border: "1px solid #2a2a3a",
-    backgroundColor: "transparent",
-    color: "#888",
-    fontSize: "0.8rem",
-    cursor: "pointer",
-    marginBottom: "1rem",
-  },
-  codeBox: {
-    backgroundColor: "#0a0a0f",
-    border: "1px solid #2a2a3a",
-    borderRadius: 8,
-    padding: "0.75rem 1rem",
-    color: "#888",
-    fontSize: "0.8rem",
-    overflowX: "auto" as const,
-    margin: "0 0 0.5rem",
-    wordBreak: "break-all" as const,
-    whiteSpace: "pre-wrap" as const,
-  },
-  hint: {
-    color: "#666",
-    fontSize: "0.85rem",
-    margin: "0 0 0.4rem",
-    lineHeight: 1.5,
-  },
-  link: {
-    color: "#3b82f6",
-    textDecoration: "none",
-  },
-  ctas: {
-    display: "flex",
-    gap: "0.75rem",
-    marginTop: "1.25rem",
-  },
-  ctaPrimary: {
-    display: "inline-block",
-    padding: "0.65rem 1.5rem",
-    backgroundColor: "#3b82f6",
-    color: "#fff",
-    borderRadius: 8,
-    textDecoration: "none",
-    fontWeight: 600,
-    fontSize: "0.9rem",
-  },
-  ctaSecondary: {
-    display: "inline-block",
-    padding: "0.65rem 1.5rem",
-    backgroundColor: "transparent",
-    color: "#3b82f6",
-    border: "1px solid #3b82f6",
-    borderRadius: 8,
-    textDecoration: "none",
-    fontWeight: 600,
-    fontSize: "0.9rem",
-  },
+const link: React.CSSProperties = { color: C.accent, textDecoration: "none", borderBottom: `1px dotted ${C.accent}` };
+
+const copyBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  padding: "8px 16px",
+  borderRadius: 5,
+  border: `1px solid ${C.borderLight}`,
+  background: "transparent",
+  color: C.muted,
+  cursor: "pointer",
+  marginBottom: 20,
+  transition: "all 0.15s ease",
 };
+
+const primaryBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  padding: "12px 24px",
+  background: C.accent,
+  color: C.white,
+  border: "none",
+  borderRadius: 5,
+  textDecoration: "none",
+  boxShadow: `0 0 10px ${accent(0.3)}`,
+  transition: "opacity 0.15s ease",
+};
+
+const ghostBtnInline: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  padding: "12px 24px",
+  background: "transparent",
+  color: C.accent,
+  border: `1px solid ${accent(0.4)}`,
+  borderRadius: 5,
+  textDecoration: "none",
+  transition: "background 0.15s ease",
+};
+
+const ghostBtn: React.CSSProperties = { ...ghostBtnInline, display: "inline-block" };

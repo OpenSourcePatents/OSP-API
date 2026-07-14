@@ -1,235 +1,241 @@
-import { Metadata } from "next";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { C, F, accent } from "@/lib/theme";
+import { Card, CardHeaderBar, TagPill, NeonTitle, StatusDot } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Pricing - OSP Civic Data API",
 };
 
-function TierCard({
-  name,
-  rate,
-  price,
-  who,
-  highlight,
-  cta,
-}: {
+interface Tier {
   name: string;
   rate: string;
   price: string;
   who: string;
-  highlight?: boolean;
-  cta?: { label: string; href: string };
-}) {
-  return (
-    <div style={{
-      ...s.tierCard,
-      ...(highlight ? { borderColor: "#3b82f6" } : {}),
-    }}>
-      <p style={s.tierName}>{name}</p>
-      <p style={s.tierRate}>{rate}</p>
-      <p style={s.tierPrice}>{price}</p>
-      <p style={s.tierWho}>{who}</p>
-      {cta && <a href={cta.href} style={s.tierCta}>{cta.label}</a>}
-    </div>
-  );
+  tag: string;
+  recommended?: boolean;
+  cta: { label: string; href?: string; disabled?: boolean };
 }
+
+const TIERS: Tier[] = [
+  {
+    name: "FREE",
+    rate: "1,000",
+    price: "Free forever",
+    who: "Everyone — sign up with an email and start building.",
+    tag: "RECOMMENDED",
+    recommended: true,
+    cta: { label: "GET FREE KEY →", href: "/signup" },
+  },
+  {
+    name: "DISCOUNTED",
+    rate: "10,000",
+    price: "Free or reduced",
+    who: "Educators (.edu), 501(c)(3) nonprofits, and researchers. Apply by email.",
+    tag: "EDU / NPO",
+    cta: {
+      label: "APPLY →",
+      href: "mailto:opensourcepatents@gmail.com?subject=Discounted%20Tier%20Request",
+    },
+  },
+  {
+    name: "PAID",
+    rate: "10,000",
+    price: "Coming soon",
+    who: "Commercial applications and high-volume users.",
+    tag: "COMMERCIAL",
+    cta: { label: "COMING SOON", disabled: true },
+  },
+];
 
 export default function PricingPage() {
   return (
-    <div style={s.page}>
-      <div style={s.container}>
-        <h1 style={s.title}>API Tiers</h1>
-        <p style={s.subtitle}>
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 64px" }}>
+      <div style={{ textAlign: "center", marginBottom: 40 }}>
+        <p
+          style={{
+            fontFamily: F.mono,
+            fontSize: 9,
+            color: accent(0.6),
+            letterSpacing: 2,
+            textTransform: "uppercase",
+            marginBottom: 12,
+          }}
+        >
+          ACCESS TIERS
+        </p>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>
+          <NeonTitle size={40} letterSpacing={4} strokeWidth={1.5}>
+            PRICING
+          </NeonTitle>
+        </div>
+        <p style={{ fontFamily: F.body, fontSize: 16, color: C.muted }}>
           All tiers get full access to every endpoint. The only difference is rate limits.
         </p>
+      </div>
 
-        <div style={s.grid}>
-          <TierCard
-            name="Free"
-            rate="1,000 req/hr"
-            price="Free forever"
-            who="Everyone — sign up with an email and start building."
-            highlight
-            cta={{ label: "Get Free Key", href: "/signup" }}
-          />
-          <TierCard
-            name="Discounted"
-            rate="10,000 req/hr"
-            price="Free or reduced"
-            who="Educators (.edu), 501(c)(3) nonprofits, and researchers. Apply by email."
-            cta={{ label: "Apply", href: "mailto:opensourcepatents@gmail.com?subject=Discounted%20Tier%20Request" }}
-          />
-          <TierCard
-            name="Paid"
-            rate="10,000 req/hr"
-            price="Coming soon"
-            who="Commercial applications and high-volume users."
-          />
-          <TierCard
-            name="Admin"
-            rate="Unlimited"
-            price="N/A"
-            who="Internal use only."
-          />
-        </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
+          marginBottom: 40,
+        }}
+      >
+        {TIERS.map((t) => (
+          <Card
+            key={t.name}
+            borderColor={t.recommended ? C.accent : C.border}
+            header={
+              <CardHeaderBar
+                borderColor={t.recommended ? accent(0.2) : C.border}
+                right={
+                  <TagPill color={t.recommended ? C.accent : C.muted} borderColor={t.recommended ? accent(0.3) : C.border}>
+                    {t.tag}
+                  </TagPill>
+                }
+              />
+            }
+          >
+            <div style={{ padding: "20px 14px" }}>
+              <h3
+                style={{
+                  fontFamily: F.display,
+                  fontSize: 20,
+                  fontWeight: 800,
+                  color: C.white,
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                  marginBottom: 6,
+                }}
+              >
+                {t.name}
+              </h3>
+              <p style={{ fontFamily: F.mono, fontSize: 22, fontWeight: 600, color: C.accent, marginBottom: 4 }}>
+                {t.rate} <span style={{ fontSize: 12, color: C.muted }}>req/hr</span>
+              </p>
+              <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, marginBottom: 4 }}>{t.price}</p>
+              <p style={{ fontFamily: F.body, fontSize: 13, color: C.faint, lineHeight: 1.5, marginBottom: 16 }}>
+                {t.who}
+              </p>
 
-        <div style={s.faq}>
-          <h2 style={s.faqTitle}>How do tiers work?</h2>
-          <p style={s.faqText}>
-            Every new signup gets the <strong>free</strong> tier automatically.
-            Rate limits are enforced per API key using a sliding 1-hour window.
-            If you hit the limit, you&apos;ll get a <code style={s.code}>401</code> response
-            with a message indicating when to retry.
-          </p>
-          <p style={s.faqText}>
-            To request <strong>discounted</strong> access, email{" "}
-            <a href="mailto:opensourcepatents@gmail.com" style={s.link}>
-              opensourcepatents@gmail.com
-            </a>{" "}
-            with your name, organization, and a brief description of your use case.
-            Edu emails (.edu), registered 501(c)(3) orgs, and academic researchers qualify.
-          </p>
-        </div>
+              {t.cta.disabled ? (
+                <div
+                  style={{
+                    width: "100%",
+                    textAlign: "center",
+                    fontFamily: F.display,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    padding: 12,
+                    color: C.faint,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 5,
+                  }}
+                >
+                  {t.cta.label}
+                </div>
+              ) : t.recommended ? (
+                <Link
+                  href={t.cta.href!}
+                  className="dc-btn-primary"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "center",
+                    fontFamily: F.display,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    padding: 12,
+                    background: C.accent,
+                    color: C.white,
+                    borderRadius: 5,
+                    textDecoration: "none",
+                    boxShadow: `0 0 10px ${accent(0.3)}`,
+                    transition: "opacity 0.15s ease",
+                  }}
+                >
+                  {t.cta.label}
+                </Link>
+              ) : (
+                <a
+                  href={t.cta.href!}
+                  className="dc-btn-ghost"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: "center",
+                    fontFamily: F.display,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: 1.5,
+                    textTransform: "uppercase",
+                    padding: 12,
+                    background: "transparent",
+                    color: C.accent,
+                    border: `1px solid ${accent(0.4)}`,
+                    borderRadius: 5,
+                    textDecoration: "none",
+                    transition: "background 0.15s ease",
+                  }}
+                >
+                  {t.cta.label}
+                </a>
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
 
-        <div style={s.ctaRow}>
-          <a href="/signup" style={s.ctaPrimary}>Get Free Key</a>
-          <a href="/docs" style={s.ctaSecondary}>API Docs</a>
+      {/* FAQ */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, padding: 20, marginBottom: 32 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+          <StatusDot size={5} />
+          <span
+            style={{
+              fontFamily: F.display,
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 2,
+              color: C.muted,
+              textTransform: "uppercase",
+            }}
+          >
+            HOW TIERS WORK
+          </span>
         </div>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.7, marginBottom: 10 }}>
+          Every new signup gets the <strong style={{ color: C.text }}>free</strong> tier automatically. Rate limits
+          are enforced per API key using a sliding 1-hour window. If you exceed the limit, you&apos;ll get a{" "}
+          <code style={codeInline}>429</code> response — back off and retry.
+        </p>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.7 }}>
+          To request <strong style={{ color: C.text }}>discounted</strong> access, email{" "}
+          <a href="mailto:opensourcepatents@gmail.com" style={link}>
+            opensourcepatents@gmail.com
+          </a>{" "}
+          with your name, organization, and use case.
+        </p>
       </div>
     </div>
   );
 }
 
-const s: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    backgroundColor: "#0a0a0f",
-    color: "#e0e0e0",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-  },
-  container: {
-    maxWidth: 820,
-    margin: "0 auto",
-    padding: "3rem 1.5rem",
-  },
-  title: {
-    color: "#fff",
-    fontSize: "2rem",
-    fontWeight: 700,
-    margin: 0,
-    textAlign: "center" as const,
-  },
-  subtitle: {
-    color: "#888",
-    fontSize: "1rem",
-    textAlign: "center" as const,
-    marginTop: "0.5rem",
-    marginBottom: "2rem",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-    gap: "1rem",
-    marginBottom: "2.5rem",
-  },
-  tierCard: {
-    backgroundColor: "#12121a",
-    border: "1px solid #1e1e2e",
-    borderRadius: 10,
-    padding: "1.25rem",
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "0.4rem",
-  },
-  tierName: {
-    color: "#fff",
-    fontSize: "1.1rem",
-    fontWeight: 700,
-    margin: 0,
-  },
-  tierRate: {
-    color: "#3b82f6",
-    fontSize: "0.9rem",
-    fontWeight: 600,
-    margin: 0,
-  },
-  tierPrice: {
-    color: "#aaa",
-    fontSize: "0.85rem",
-    margin: 0,
-  },
-  tierWho: {
-    color: "#666",
-    fontSize: "0.8rem",
-    lineHeight: 1.45,
-    margin: 0,
-    flex: 1,
-  },
-  tierCta: {
-    display: "inline-block",
-    marginTop: "0.5rem",
-    padding: "0.5rem 1rem",
-    backgroundColor: "#3b82f6",
-    color: "#fff",
-    borderRadius: 6,
-    textDecoration: "none",
-    fontWeight: 600,
-    fontSize: "0.8rem",
-    textAlign: "center" as const,
-  },
-  faq: {
-    backgroundColor: "#12121a",
-    border: "1px solid #1e1e2e",
-    borderRadius: 10,
-    padding: "1.5rem",
-    marginBottom: "2rem",
-  },
-  faqTitle: {
-    color: "#fff",
-    fontSize: "1.1rem",
-    fontWeight: 600,
-    margin: "0 0 0.75rem",
-  },
-  faqText: {
-    color: "#888",
-    fontSize: "0.9rem",
-    lineHeight: 1.6,
-    margin: "0 0 0.75rem",
-  },
-  code: {
-    backgroundColor: "#1a1a2a",
-    padding: "2px 6px",
-    borderRadius: 4,
-    fontSize: "0.85em",
-    color: "#c8c8d0",
-  },
-  link: {
-    color: "#3b82f6",
-    textDecoration: "none",
-  },
-  ctaRow: {
-    display: "flex",
-    gap: "0.75rem",
-    justifyContent: "center",
-  },
-  ctaPrimary: {
-    display: "inline-block",
-    padding: "0.75rem 2rem",
-    backgroundColor: "#3b82f6",
-    color: "#fff",
-    borderRadius: 8,
-    textDecoration: "none",
-    fontWeight: 600,
-    fontSize: "1rem",
-  },
-  ctaSecondary: {
-    display: "inline-block",
-    padding: "0.75rem 2rem",
-    backgroundColor: "transparent",
-    color: "#3b82f6",
-    border: "1px solid #3b82f6",
-    borderRadius: 8,
-    textDecoration: "none",
-    fontWeight: 600,
-    fontSize: "1rem",
-  },
+const codeInline: React.CSSProperties = {
+  fontFamily: F.mono,
+  fontSize: 12,
+  background: "#1a1a2a",
+  padding: "2px 6px",
+  borderRadius: 3,
+  color: C.codeInk,
+};
+
+const link: React.CSSProperties = {
+  color: C.accent,
+  borderBottom: `1px dotted ${C.accent}`,
+  textDecoration: "none",
 };
