@@ -144,9 +144,11 @@ export function NeonTitle({
 }) {
   const base: React.CSSProperties = {
     fontFamily: F.display,
-    fontSize: size,
+    // Fluid down on narrow viewports so long titles never exceed the screen,
+    // capped at the requested px size on larger screens.
+    fontSize: `min(${size}px, 11vw)`,
     fontWeight: 800,
-    letterSpacing,
+    letterSpacing: `min(${letterSpacing}px, 1.4vw)`,
     textTransform: "uppercase",
     lineHeight: 1.1,
     margin: 0,

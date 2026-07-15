@@ -146,8 +146,8 @@ export default function LandingPage() {
           {STATS.map((s, i) => (
             <div key={s.label} style={{ display: "flex", alignItems: "center", flex: 1 }}>
               {i > 0 && <div style={{ width: 1, height: 48, background: C.border }} />}
-              <div style={{ flex: 1, textAlign: "center", padding: "20px 16px" }}>
-                <div style={{ fontFamily: F.mono, fontSize: 28, fontWeight: 600, color: C.white }}>{s.value}</div>
+              <div style={{ flex: 1, textAlign: "center", padding: "20px clamp(6px, 3vw, 16px)" }}>
+                <div style={{ fontFamily: F.mono, fontSize: "min(28px, 7vw)", fontWeight: 600, color: C.white }}>{s.value}</div>
                 <div
                   style={{
                     fontFamily: F.display,

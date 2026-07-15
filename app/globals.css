@@ -87,6 +87,26 @@ body {
   }
 }
 
+/* ── Responsive: stack the header chrome on narrow screens ──── */
+@media (max-width: 760px) {
+  .dc-header-inner {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    height: auto !important;
+    padding: 10px 16px !important;
+    gap: 8px !important;
+  }
+  .dc-clock-wrap { display: none !important; }
+  .dc-brand { justify-content: center !important; }
+  .dc-nav-wrap { justify-content: center !important; }
+  .dc-nav { flex-wrap: wrap !important; justify-content: center !important; }
+}
+@media (max-width: 380px) {
+  .dc-brand-tag { display: none !important; }
+  .dc-navlink { padding: 6px 8px !important; letter-spacing: 2px !important; }
+}
+
 /* ── Hover / focus (inline styles can't express these) ─────── */
 .dc-navlink:hover { background: rgba(59, 130, 246, 0.1); }
 .dc-card-link:hover { border-color: rgba(59, 130, 246, 0.3); }

@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.2] - 2026-07-15
+### Fixed — mobile layout
+- Header (`components/Chrome.tsx`) overflowed narrow screens: the rigid `1fr auto 1fr` grid with a
+  `nowrap` brand + clock + 4 nav links was wider than a phone, and `body { overflow-x: hidden }`
+  clipped the nav. Added class hooks + a `max-width: 760px` media query that stacks the header into
+  centered rows, hides the decorative clock, and lets the nav wrap; `≤380px` also drops the "API v2"
+  tag and tightens nav padding.
+- Hero/pricing titles (`NeonTitle`) rendered at a fixed 64px/40px and overflowed phones. Font size and
+  letter-spacing are now `min(px, vw)` — fluid below the cap, unchanged on desktop.
+- Landing stat strip: number size and cell padding are now viewport-relative so the four columns don't
+  clip under ~360px.
+
+## [1.1.1] - 2026-07-15
+### Fixed
+- Favicon was referenced in `app/layout.tsx` but the file was missing from `public/` — the tab icon
+  was broken. Added the OSP icon set (`favicon.ico`, `icon-32.png`, `apple-touch-icon.png`, copied
+  from osp-portal) and expanded the `metadata.icons` config to serve all three.
+
 ## [1.1.0] - 2026-07-14
 ### Added — "Arcade terminal" redesign of all public pages
 - Reskinned landing, docs, pricing, signup, and auth-success pages to a dark neon aesthetic

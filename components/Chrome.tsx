@@ -59,7 +59,7 @@ const NAV = [
 function Nav() {
   const pathname = usePathname();
   return (
-    <nav style={{ display: "flex", gap: 4 }}>
+    <nav className="dc-nav" style={{ display: "flex", gap: 4 }}>
       {NAV.map((item) => {
         const active =
           item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -104,6 +104,7 @@ function Header() {
       }}
     >
       <div
+        className="dc-header-inner"
         style={{
           maxWidth: 1200,
           margin: "0 auto",
@@ -117,6 +118,7 @@ function Header() {
       >
         <Link
           href="/"
+          className="dc-brand"
           style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", minWidth: 0 }}
         >
           <img
@@ -147,6 +149,7 @@ function Header() {
             OSP · CIVIC DATA
           </span>
           <span
+            className="dc-brand-tag"
             style={{
               fontFamily: F.mono,
               fontSize: 9,
@@ -159,11 +162,11 @@ function Header() {
           </span>
         </Link>
 
-        <div style={{ display: "flex", justifyContent: "center" }}>
+        <div className="dc-clock-wrap" style={{ display: "flex", justifyContent: "center" }}>
           <NeonClock />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+        <div className="dc-nav-wrap" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
           <Nav />
         </div>
       </div>
