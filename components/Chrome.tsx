@@ -155,7 +155,7 @@ function Header() {
               textTransform: "uppercase",
             }}
           >
-            API v1
+            API v2
           </span>
         </Link>
 
