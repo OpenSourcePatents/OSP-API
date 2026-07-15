@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { auth } from "@/lib/neon-auth";
+import { getAuth } from "@/lib/neon-auth";
 import { db } from "@/lib/db";
 import { apiKeys } from "@/lib/schema";
 
@@ -41,7 +41,7 @@ async function sendKeyEmail(email: string, apiKey: string) {
 
 /** The signed-in user's API key, if they have one. */
 export async function GET() {
-  const { data: session } = await auth.getSession();
+  const { data: session } = await getAuth().getSession();
   const email = session?.user?.email;
 
   if (!email) {
@@ -66,7 +66,7 @@ export async function GET() {
  * second one, so a double-submit or a re-visit can't orphan a live key.
  */
 export async function POST() {
-  const { data: session } = await auth.getSession();
+  const { data: session } = await getAuth().getSession();
   const user = session?.user;
   const email = user?.email;
 
