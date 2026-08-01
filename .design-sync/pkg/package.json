@@ -1,0 +1,15 @@
+{
+  "name": "osp-arcade",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OSP arcade-terminal design system — neon-on-dark primitives.",
+  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }
+}

@@ -14,7 +14,7 @@ OSP-API is a free, open-source REST API aggregating congressional accountability
 - **Rate limiting:** Redis via `@upstash/ratelimit` (sliding window, per tier) — **fails open if unavailable**
 - **Email:** Resend, for delivering the API key on issuance
 
-> **History (read this before touching the data layer):** this API originally ran on two Supabase projects — one for `api_keys` + GoTrue auth, one holding the congressional data. Both were deleted. The Upstash Redis instance was deleted too. Do not reintroduce `@supabase/supabase-js`, `lib/supabase.ts`, or any `SUPABASE_*` env var; they are gone deliberately.
+> **History (read this before touching the data layer):** this API originally ran on two Supabase projects — one for `api_keys` + GoTrue auth, one holding the congressional data. Both were deleted, and the API was rebuilt on Neon + CongressWatch JSON. Supabase has since returned for **authentication only**: `lib/supabase-auth.ts` verifies Supabase access tokens (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) for `POST /api/v1/keys/mine`, replacing Neon Auth as the identity provider. Neon via Drizzle remains the **sole database** — do not store or query data in Supabase, and do not reintroduce a Supabase data client.
 
 ## Commands
 
@@ -40,7 +40,8 @@ CongressWatch pipeline → commits JSON to git → congresswatch.vercel.app/data
 - `lib/db.ts` / `lib/schema.ts` — Neon Postgres via Drizzle. Module-scope `pg.Pool` + `attachDatabasePool` (required for Vercel Fluid compute).
 - `lib/auth.ts` — `validateApiKey()`: `X-API-Key` → Neon lookup → rate limit → usage increment.
 - `lib/redis.ts` — tiered rate limiters. Reads `KV_REST_API_*` or `UPSTASH_REDIS_REST_*`.
-- `lib/neon-auth.ts` / `lib/neon-auth-client.ts` — Neon Auth server + browser clients.
+- `lib/supabase-auth.ts` / `lib/supabase-client.ts` — Supabase Auth: server-side bearer-token verification for `/api/v1/keys/mine`, and the browser sign-in client used by `/signup` (Google/GitHub OAuth, PKCE).
+- `lib/neon-auth.ts` / `lib/neon-auth-client.ts` — Neon Auth server + browser clients. Being replaced by Supabase Auth; still backs `/api/auth/*`, `/api/keys`, and `/auth/success` until the migration is verified in production.
 - `lib/handlers.ts` — `memberCollection()` factory shared by the five member sub-collection routes.
 - `lib/response.ts` — `ok()`, `paginated()`, `err()`, `options()` with CORS baked in.
 

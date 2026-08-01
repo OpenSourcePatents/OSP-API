@@ -1,0 +1,127 @@
+@import url("https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Barlow:wght@300;400;500;600&display=swap");
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #0a0a0f;
+  color: #e0e0e0;
+  font-family: "Barlow", sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Overlays ─────────────────────────────────────────────── */
+.dc-grid {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, transparent, transparent 32px, rgba(59, 130, 246, 0.03) 32px, rgba(59, 130, 246, 0.03) 33px),
+    repeating-linear-gradient(90deg, transparent, transparent 32px, rgba(59, 130, 246, 0.03) 32px, rgba(59, 130, 246, 0.03) 33px);
+}
+.dc-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 10%, rgba(59, 130, 246, 0.06) 0%, transparent 50%, rgba(0, 0, 0, 0.4) 100%);
+}
+.dc-scanline {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 2px;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.5), transparent);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4), 0 0 30px rgba(59, 130, 246, 0.2);
+  animation: scanline-move 9s linear infinite;
+}
+
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes logo-spin {
+  0% { transform: rotateY(0deg); }
+  49.9% { transform: rotateY(90deg); }
+  50% { transform: rotateY(-90deg); }
+  100% { transform: rotateY(0deg); }
+}
+@keyframes scanline-move {
+  0% { top: -2px; }
+  100% { top: 100vh; }
+}
+@keyframes neon-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 7px rgba(59, 130, 246, 0.8), 0 0 20px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.3);
+  }
+  20%, 24%, 55% { opacity: 0.4; text-shadow: none; }
+}
+@keyframes status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Respect reduced-motion: kill the animated chrome, keep everything legible. */
+@media (prefers-reduced-motion: reduce) {
+  .dc-scanline,
+  .dc-neon-fill,
+  .dc-logo,
+  .dc-dot {
+    animation: none !important;
+  }
+  .dc-neon-fill {
+    opacity: 1;
+    text-shadow: 0 0 7px rgba(59, 130, 246, 0.6), 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+}
+
+/* ── Responsive: stack the header chrome on narrow screens ──── */
+@media (max-width: 760px) {
+  .dc-header-inner {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    height: auto !important;
+    padding: 10px 16px !important;
+    gap: 8px !important;
+  }
+  .dc-clock-wrap { display: none !important; }
+  .dc-brand { justify-content: center !important; }
+  .dc-nav-wrap { justify-content: center !important; }
+  .dc-nav { flex-wrap: wrap !important; justify-content: center !important; }
+}
+@media (max-width: 380px) {
+  .dc-brand-tag { display: none !important; }
+  .dc-navlink { padding: 6px 8px !important; letter-spacing: 2px !important; }
+}
+
+/* ── Hover / focus (inline styles can't express these) ─────── */
+.dc-navlink:hover { background: rgba(59, 130, 246, 0.1); }
+.dc-card-link:hover { border-color: rgba(59, 130, 246, 0.3); }
+.dc-btn-primary:hover { opacity: 0.85; }
+.dc-btn-ghost:hover { background: rgba(59, 130, 246, 0.08); }
+.dc-arrow:hover { opacity: 0.7; }
+.dc-oauth:hover { opacity: 0.9; }
+.dc-chip:hover { color: #3b82f6; }
+.dc-copy:hover { color: #fff; border-color: rgba(59, 130, 246, 0.4); }
+.dc-input {
+  transition: border-color 0.15s ease;
+}
+.dc-input:focus { border-color: #3b82f6; }
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0f; }
+::-webkit-scrollbar-thumb { background: #1e1e2e; border-radius: 3px; }

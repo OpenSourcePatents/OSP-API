@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.2.0] - 2026-08-01
+### Added — `POST /api/v1/keys/mine`, backed by Supabase Auth
+- New route (`app/api/v1/keys/mine/route.ts`) that hands a signed-in user their API key.
+  Identity comes from an `Authorization: Bearer <token>` Supabase access token; the request body is
+  never read, so a caller can only act as whoever their token belongs to. Resolution order: a live
+  row already claimed by that `user_id` → an unclaimed row with the same verified email, which is
+  adopted by backfilling `user_id` → otherwise mint a new key. Returns the standard single-object
+  envelope `{ data: { key, tier, created_at } }` (201 on mint, 200 otherwise). `tier` is hardcoded
+  `'free'` on insert and never read from input.
+- `lib/supabase-auth.ts` — verifies the bearer token via `auth.getUser(token)`, which checks
+  signature and expiry server-side. The JWT is never decoded locally. Client is built lazily for the
+  same reason `lib/neon-auth.ts` is: constructing it at module scope breaks `next build`, which has
+  no runtime secrets. Reads `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- `@supabase/supabase-js` added as a dependency.
+- `/signup` now signs in with Supabase Auth (Google/GitHub OAuth, PKCE) instead of the Neon Auth
+  UI, then calls `POST /api/v1/keys/mine` with the access token and shows the key with a copy
+  button and `X-API-Key` usage note. A visitor with a persisted session skips straight to their
+  key. The email/password form is gone — OAuth providers supply a verified email, which is what
+  issuance requires. `lib/supabase-client.ts` holds the lazily-built browser client. The Neon Auth
+  path (`/api/auth/*`, `/api/keys`, `/auth/success`) stays live until this is verified in
+  production; only the signup page moved. Failure handling: a failed code exchange or OAuth error
+  bounce surfaces a generic retryable message (URL error params are never rendered — they're
+  attacker-craftable), the spent `?code=` is scrubbed from the URL, and sign-out verifies the
+  session was actually cleared before saying so.
+
+### Changed
+- `lib/schema.ts` — declared the `user_id` (text, nullable) and `revoked` (boolean, default false)
+  columns that already exist on `api_keys`, plus an index on `user_id`. Drizzle could not query them
+  while they were undeclared. Revoked rows are treated as absent: never returned, never adopted.
+- `CLAUDE.md` — rewrote the history note that forbade `@supabase/supabase-js` and `SUPABASE_*` env
+  vars: Supabase now handles authentication only, and Neon via Drizzle remains the sole database.
+  Congressional data still comes from CongressWatch JSON — Supabase replaced Neon Auth as the
+  identity provider, nothing more.
+
 ## [1.1.2] - 2026-07-15
 ### Fixed — mobile layout
 - Header (`components/Chrome.tsx`) overflowed narrow screens: the rigid `1fr auto 1fr` grid with a

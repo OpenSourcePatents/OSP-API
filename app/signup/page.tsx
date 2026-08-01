@@ -1,32 +1,25 @@
 "use client";
 
-import { Suspense, useState, FormEvent, useEffect, useMemo } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { authClient } from "@/lib/neon-auth-client";
-import { C, F, accent } from "@/lib/theme";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { getSupabase } from "@/lib/supabase-client";
+import { C, F, accent, green } from "@/lib/theme";
 import { CardHeaderBar, TagPill } from "@/components/ui";
 
+/**
+ * Sign-in + API key issuance, on Supabase Auth (Google / GitHub OAuth).
+ *
+ * Replaces the Neon Auth UI that lived here. The Neon Auth path —
+ * /api/auth/[...path], /api/keys, and /auth/success — is deliberately still
+ * live until this page is verified in production; only this page moved.
+ *
+ * Flow: sign in with Supabase → POST /api/v1/keys/mine with the access token
+ * as a Bearer header → show the key. A visitor with a persisted session skips
+ * straight to the key. The email/password form is gone: OAuth providers hand
+ * us a verified email, which is what key issuance requires.
+ */
+
 // --- SVG icons ---
-
-function EyeIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  );
-}
 
 function GoogleIcon() {
   return (
@@ -47,80 +40,6 @@ function GitHubIcon() {
   );
 }
 
-// --- Password helpers ---
-
-const PW_RULES = [
-  { key: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
-  { key: "upper", label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
-  { key: "number", label: "One number", test: (p: string) => /\d/.test(p) },
-  { key: "special", label: "One special character (!@#$%^&*)", test: (p: string) => /[!@#$%^&*]/.test(p) },
-] as const;
-
-function getStrength(password: string): { label: string; color: string; pct: number } {
-  const passed = PW_RULES.filter((r) => r.test(password)).length;
-  if (passed <= 1) return { label: "Weak", color: "#ef4444", pct: 25 };
-  if (passed <= 2) return { label: "Fair", color: "#f59e0b", pct: 50 };
-  if (passed <= 3) return { label: "Good", color: "#eab308", pct: 75 };
-  return { label: "Strong", color: "#22c55e", pct: 100 };
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 5,
-  border: `1px solid ${C.borderLight}`,
-  background: C.surfaceInk,
-  color: C.white,
-  fontFamily: F.mono,
-  fontSize: 14,
-  outline: "none",
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-function PasswordInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-}) {
-  const [show, setShow] = useState(false);
-  return (
-    <div style={{ position: "relative" }}>
-      <input
-        className="dc-input"
-        type={show ? "text" : "password"}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required
-        style={inputStyle}
-      />
-      <button
-        type="button"
-        onClick={() => setShow(!show)}
-        aria-label={show ? "Hide password" : "Show password"}
-        style={{
-          position: "absolute",
-          right: 10,
-          top: "50%",
-          transform: "translateY(-50%)",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          padding: 4,
-          display: "flex",
-          alignItems: "center",
-        }}
-      >
-        {show ? <EyeOffIcon /> : <EyeIcon />}
-      </button>
-    </div>
-  );
-}
-
 function errMessage(e: unknown): string {
   if (e && typeof e === "object" && "message" in e) {
     return String((e as { message: unknown }).message);
@@ -128,259 +47,375 @@ function errMessage(e: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
-type Mode = "signup" | "signin";
+type State =
+  | { status: "checking" } // is there a persisted session?
+  | { status: "signedOut" }
+  | { status: "fetching" } // signed in, key request in flight
+  | { status: "ok"; key: string; tier: string; created: boolean }
+  | { status: "error"; message: string };
 
-function AuthForm() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
+/** How long to wait on an OAuth code exchange before assuming it failed. */
+const OAUTH_EXCHANGE_TIMEOUT_MS = 8000;
 
-  const [mode, setMode] = useState<Mode>("signup");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+export default function SignupPage() {
+  const [state, setState] = useState<State>({ status: "checking" });
+  // Sign-in failures shown inline on the signed-out card, distinct from the
+  // fatal error state — the user can simply try the buttons again.
+  const [oauthError, setOauthError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  // Read by timer callbacks that must not act on a stale status. The check
+  // lives in the callbacks, not in setState updaters — updaters must stay pure
+  // (strict mode double-invokes them).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  });
+
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
-    if (searchParams.get("error")) setError("Sign-in failed. Please try again.");
-  }, [searchParams]);
+    let cancelled = false;
+    // Deduped per effect run, not per component: the only way to sign in again
+    // after signing out is the OAuth redirect, which remounts the page.
+    let started = false;
+    const supabase = getSupabase();
 
-  const ruleResults = useMemo(() => PW_RULES.map((r) => ({ ...r, met: r.test(password) })), [password]);
-  const allRulesMet = ruleResults.every((r) => r.met);
-  const passwordsMatch = password.length > 0 && password === confirm;
-  const strength = useMemo(() => getStrength(password), [password]);
+    setState({ status: "checking" });
 
-  const canSubmit =
-    mode === "signup"
-      ? email.length > 0 && allRulesMet && passwordsMatch && !loading
-      : email.length > 0 && password.length > 0 && !loading;
+    // An OAuth failure bounces back with error params rather than a code.
+    // Show a generic message — the param text is attacker-influenceable
+    // (anyone can craft a link to this page), so it is never rendered — and
+    // clean the URL so a reload doesn't re-show it.
+    const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const failed = ["error", "error_description"].some(
+      (p) => search.has(p) || hash.has(p),
+    );
+    const returningFromOAuth = search.has("code");
+    if (failed) {
+      setOauthError("Sign-in failed. Please try again.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
+    async function fetchKey(token: string) {
+      if (started) return;
+      started = true;
+      setState({ status: "fetching" });
+      try {
+        const res = await fetch("/api/v1/keys/mine", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const body = await res.json();
+        if (cancelled) return;
+
+        if (!res.ok) {
+          setState({
+            status: "error",
+            message: body.error ?? "Could not issue an API key.",
+          });
+          return;
+        }
+        setState({
+          status: "ok",
+          key: body.data.key,
+          tier: body.data.tier,
+          created: res.status === 201,
+        });
+      } catch {
+        if (!cancelled) {
+          setState({ status: "error", message: "Network error. Please try again." });
+        }
+      }
+    }
+
+    // getSession waits for client init — including the ?code= exchange on an
+    // OAuth return — so a session here covers both the returning visitor and
+    // the fresh login. The subscription below is the backstop for a session
+    // that lands after this resolves.
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      if (data.session) {
+        void fetchKey(data.session.access_token);
+      } else if (!returningFromOAuth) {
+        setState((s) => (s.status === "checking" ? { status: "signedOut" } : s));
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        void fetchKey(session.access_token);
+      } else if (event === "SIGNED_OUT") {
+        // A failed ?code= exchange surfaces as SIGNED_OUT, not as error params:
+        // auth-js discards the dead session and fires this event. Before the
+        // key fetch has started, that means the sign-in itself failed — say so,
+        // and drop the spent code from the URL (auth-js strips it only on
+        // success).
+        if (returningFromOAuth && !started) {
+          setOauthError("Could not complete sign-in. Please try again.");
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+        setState({ status: "signedOut" });
+      }
+    });
+
+    // A ?code= that never becomes a session and never fires an event (e.g.
+    // opened in a browser without the PKCE verifier, or a hung exchange) would
+    // otherwise spin forever. Status is read via stateRef out here, keeping the
+    // setState updater pure.
+    const timer = returningFromOAuth
+      ? setTimeout(() => {
+          if (cancelled || stateRef.current.status !== "checking") return;
+          setOauthError("Could not complete sign-in. Please try again.");
+          window.history.replaceState(null, "", window.location.pathname);
+          setState({ status: "signedOut" });
+        }, OAUTH_EXCHANGE_TIMEOUT_MS)
+      : null;
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [attempt]);
 
   async function social(provider: "google" | "github") {
-    setError("");
+    setOauthError("");
     try {
-      await authClient.signIn.social({ provider, callbackURL: "/auth/success" });
+      const { error } = await getSupabase().auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: `${window.location.origin}/signup` },
+      });
+      // On success the browser navigates away; an error means it didn't start.
+      if (error) setOauthError(error.message);
     } catch (e) {
-      setError(errMessage(e));
+      setOauthError(errMessage(e));
     }
   }
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setError("");
-    setMessage("");
-    setLoading(true);
+  async function signOut() {
+    const supabase = getSupabase();
+    let error: unknown = null;
     try {
-      if (mode === "signup") {
-        await authClient.signUp.email({ email, password, name: email });
-        setMessage(
-          "Check your email to verify your address. Once verified, sign in and your API key will be issued.",
-        );
-      } else {
-        await authClient.signIn.email({ email, password });
-        router.push("/auth/success");
-      }
-    } catch (err) {
-      setError(errMessage(err));
-    } finally {
-      setLoading(false);
+      // signOut resolves with { error } rather than throwing, and on failure
+      // (offline, 5xx) auth-js keeps the localStorage session. Global revoke
+      // first; if the server rejects it, retry revoking just this session.
+      ({ error } = await supabase.auth.signOut());
+      if (error) ({ error } = await supabase.auth.signOut({ scope: "local" }));
+    } catch (e) {
+      error = e;
+    }
+    if (error) {
+      // The session survived — claiming "signed out" would be false: the next
+      // load of this page would silently sign the user straight back in.
+      setState({
+        status: "error",
+        message: "Could not sign out. Check your connection and try again.",
+      });
+      return;
+    }
+    setState({ status: "signedOut" });
+  }
+
+  async function copy(key: string) {
+    try {
+      await navigator.clipboard.writeText(key);
+      setCopied(true);
+      // Reset any previous timer so a rapid re-copy doesn't flip the label
+      // back moments after it re-appears; cleared on unmount above.
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — key is on screen anyway */
     }
   }
 
-  const title = mode === "signup" ? "CREATE ACCOUNT" : "SIGN IN";
-  const subtitle =
-    mode === "signup"
-      ? "Create an account to get your free API key. You'll need to verify your email first."
-      : "Sign in to retrieve your API key.";
-
-  return (
-    <div style={{ maxWidth: 460, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
-      <CardHeaderBar right={<TagPill>AUTH</TagPill>} />
-
-      <div style={{ padding: "24px 20px" }}>
-        <h1
-          style={{
-            fontFamily: F.display,
-            fontSize: 18,
-            fontWeight: 800,
-            color: C.white,
-            letterSpacing: 2,
-            textTransform: "uppercase",
-            marginBottom: 6,
-          }}
-        >
-          {title}
-        </h1>
-        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.5, marginBottom: 20 }}>{subtitle}</p>
-
-        {message ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <p style={{ fontFamily: F.display, fontSize: 12, fontWeight: 700, letterSpacing: 1.5, color: C.success, textTransform: "uppercase" }}>
-              Almost there
-            </p>
-            <p style={{ fontFamily: F.body, fontSize: 14, color: "#aaa", lineHeight: 1.5 }}>{message}</p>
-            <button
-              onClick={() => {
-                setMessage("");
-                setMode("signin");
-                setPassword("");
-                setConfirm("");
-              }}
-              className="dc-copy"
-              style={{
-                marginTop: 4,
-                padding: "10px 16px",
-                borderRadius: 5,
-                border: `1px solid ${C.borderLight}`,
-                background: "transparent",
-                color: C.muted,
-                fontFamily: F.display,
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: 1,
-                textTransform: "uppercase",
-                cursor: "pointer",
-              }}
-            >
-              Go to sign in
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* OAuth */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-              <button type="button" onClick={() => social("google")} className="dc-oauth" style={oauthLight}>
-                <GoogleIcon /> Continue with Google
-              </button>
-              <button type="button" onClick={() => social("github")} className="dc-oauth" style={oauthDark}>
-                <GitHubIcon /> Continue with GitHub
-              </button>
-            </div>
-
-            {/* Divider */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <div style={{ flex: 1, height: 1, background: C.border }} />
-              <span
-                style={{
-                  fontFamily: F.display,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: C.muted,
-                  letterSpacing: 1.5,
-                  textTransform: "uppercase",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                OR CONTINUE WITH EMAIL
-              </span>
-              <div style={{ flex: 1, height: 1, background: C.border }} />
-            </div>
-
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <input
-                className="dc-input"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                style={inputStyle}
-              />
-
-              <PasswordInput value={password} onChange={setPassword} placeholder="Password" />
-
-              {mode === "signup" && password.length > 0 && (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1, height: 4, background: C.border, borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ width: `${strength.pct}%`, height: "100%", background: strength.color, borderRadius: 2, transition: "width 0.2s" }} />
-                    </div>
-                    <span style={{ fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: strength.color, minWidth: 42, textAlign: "right" }}>
-                      {strength.label}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                    {ruleResults.map((r) => (
-                      <span key={r.key} style={{ fontFamily: F.mono, fontSize: 12, color: r.met ? C.success : "#aaa" }}>
-                        {r.met ? "✓" : "✗"} {r.label}
-                      </span>
-                    ))}
-                  </div>
-                  <PasswordInput value={confirm} onChange={setConfirm} placeholder="Confirm password" />
-                  {confirm.length > 0 && !passwordsMatch && (
-                    <p style={{ color: "#ef4444", fontFamily: F.mono, fontSize: 12, margin: 0 }}>Passwords do not match</p>
-                  )}
-                </>
-              )}
-
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                className="dc-btn-primary"
-                style={{
-                  padding: 12,
-                  borderRadius: 5,
-                  border: "none",
-                  background: C.accent,
-                  color: C.white,
-                  fontFamily: F.display,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  letterSpacing: 1.5,
-                  textTransform: "uppercase",
-                  cursor: canSubmit ? "pointer" : "not-allowed",
-                  boxShadow: `0 0 10px ${accent(0.3)}`,
-                  marginTop: 4,
-                  opacity: canSubmit ? 1 : 0.45,
-                  transition: "opacity 0.15s ease",
-                }}
-              >
-                {loading ? (mode === "signup" ? "Creating account..." : "Signing in...") : mode === "signup" ? "Sign Up" : "Sign In"}
-              </button>
-              {error && <p style={{ color: "#ef4444", fontFamily: F.body, fontSize: 13, margin: 0 }}>{error}</p>}
-            </form>
-
-            <p style={{ fontFamily: F.body, fontSize: 14, color: "#aaa", textAlign: "center", marginTop: 16 }}>
-              {mode === "signup" ? "Already have an account? " : "Need an account? "}
-              <button
-                type="button"
-                onClick={() => {
-                  setMode(mode === "signup" ? "signin" : "signup");
-                  setError("");
-                  setPassword("");
-                  setConfirm("");
-                }}
-                style={{ background: "none", border: "none", color: C.accent, fontFamily: F.body, fontSize: 14, fontWeight: 600, cursor: "pointer", padding: 0 }}
-              >
-                {mode === "signup" ? "Sign in" : "Sign up"}
-              </button>
-            </p>
-          </>
-        )}
-
-        <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 16, paddingTop: 14 }}>
-          <p style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, lineHeight: 1.6, letterSpacing: 0.3 }}>
-            Educators, nonprofits, and researchers can apply for discounted access (10,000 req/hr) — email{" "}
-            <a href="mailto:opensourcepatents@gmail.com" style={{ color: C.accent, borderBottom: `1px dotted ${C.accent}`, textDecoration: "none" }}>
-              opensourcepatents@gmail.com
-            </a>
-          </p>
-        </div>
+  const shell = (headerBar: React.ReactNode, body: React.ReactNode) => (
+    <div style={{ minHeight: "calc(100vh - 56px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 460, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
+        {headerBar}
+        <div style={{ padding: "24px 20px" }}>{body}</div>
       </div>
     </div>
   );
-}
 
-export default function SignupPage() {
-  return (
-    <div style={{ minHeight: "calc(100vh - 56px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px" }}>
-      <Suspense fallback={<p style={{ fontFamily: F.body, color: C.muted }}>Loading...</p>}>
-        <AuthForm />
-      </Suspense>
-    </div>
+  const titleStyle: React.CSSProperties = {
+    fontFamily: F.display,
+    fontSize: 18,
+    fontWeight: 800,
+    color: C.white,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  };
+
+  if (state.status === "checking" || state.status === "fetching") {
+    return shell(
+      <CardHeaderBar label="WORKING" right={<TagPill>PENDING</TagPill>} />,
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 12 }}>
+          {state.status === "checking" ? "Checking session…" : "Issuing your API key…"}
+        </h1>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted }}>One moment.</p>
+      </>,
+    );
+  }
+
+  if (state.status === "error") {
+    return shell(
+      <CardHeaderBar dotColor="#ef4444" label="ERROR" labelColor="#ef4444" right={<TagPill color="#ef4444">FAILED</TagPill>} />,
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 16 }}>Something went wrong</h1>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>{state.message}</p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={() => setAttempt((a) => a + 1)} className="dc-btn-primary" style={{ ...primaryBtn, cursor: "pointer" }}>
+            TRY AGAIN
+          </button>
+          <button onClick={signOut} className="dc-btn-ghost" style={{ ...ghostBtn, cursor: "pointer" }}>
+            SIGN OUT
+          </button>
+        </div>
+      </>,
+    );
+  }
+
+  if (state.status === "ok") {
+    return shell(
+      <CardHeaderBar
+        dotColor={C.success}
+        label="KEY ISSUED"
+        labelColor={green(0.7)}
+        right={<TagPill color={C.success} borderColor={green(0.3)}>SUCCESS</TagPill>}
+      />,
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 16 }}>{state.created ? "You're all set" : "Welcome back"}</h1>
+
+        <p style={{ fontFamily: F.display, fontSize: 9, fontWeight: 600, letterSpacing: 1.5, color: C.success, textTransform: "uppercase", marginBottom: 6 }}>
+          YOUR API KEY
+        </p>
+        <div style={{ background: C.surfaceInk, border: `1px solid ${C.borderLight}`, borderRadius: 5, padding: 14, marginBottom: 8, overflowX: "auto" }}>
+          <code style={{ fontFamily: F.mono, fontSize: 13, color: C.text, wordBreak: "break-all" }}>{state.key}</code>
+        </div>
+        <button onClick={() => copy(state.key)} className="dc-copy" style={copyBtn}>
+          {copied ? "COPIED ✓" : "COPY KEY"}
+        </button>
+
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 6 }}>
+          Send it in the <code style={{ fontFamily: F.mono, fontSize: 13, color: C.text }}>X-API-Key</code> header with every request:
+        </p>
+        <div style={{ background: C.surfaceInk, border: `1px solid ${C.borderLight}`, borderRadius: 5, padding: 14, marginBottom: 20, overflowX: "auto" }}>
+          <pre style={{ fontFamily: F.mono, fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.5 }}>X-API-Key: {state.key}</pre>
+        </div>
+
+        <p style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginBottom: 20, letterSpacing: 0.3 }}>
+          Tier: <span style={{ color: C.muted }}>{state.tier}</span> ·{" "}
+          <Link href="/pricing" style={{ color: C.accent, borderBottom: `1px dotted ${C.accent}`, textDecoration: "none" }}>
+            View all tiers
+          </Link>
+        </p>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/docs" className="dc-btn-primary" style={primaryBtn}>
+            VIEW API DOCS →
+          </Link>
+          <button onClick={signOut} className="dc-btn-ghost" style={{ ...ghostBtn, cursor: "pointer" }}>
+            SIGN OUT
+          </button>
+        </div>
+      </>,
+    );
+  }
+
+  // signedOut
+  return shell(
+    <CardHeaderBar right={<TagPill>AUTH</TagPill>} />,
+    <>
+      <h1 style={{ ...titleStyle, marginBottom: 6 }}>SIGN IN</h1>
+      <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.5, marginBottom: 20 }}>
+        Sign in to get your free API key. New accounts are created automatically.
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button type="button" onClick={() => social("google")} className="dc-oauth" style={oauthLight}>
+          <GoogleIcon /> Continue with Google
+        </button>
+        <button type="button" onClick={() => social("github")} className="dc-oauth" style={oauthDark}>
+          <GitHubIcon /> Continue with GitHub
+        </button>
+      </div>
+
+      {oauthError && (
+        <p style={{ color: "#ef4444", fontFamily: F.body, fontSize: 13, marginTop: 12, marginBottom: 0 }}>{oauthError}</p>
+      )}
+
+      <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 20, paddingTop: 14 }}>
+        <p style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, lineHeight: 1.6, letterSpacing: 0.3 }}>
+          Educators, nonprofits, and researchers can apply for discounted access (10,000 req/hr) — email{" "}
+          <a href="mailto:opensourcepatents@gmail.com" style={{ color: C.accent, borderBottom: `1px dotted ${C.accent}`, textDecoration: "none" }}>
+            opensourcepatents@gmail.com
+          </a>
+        </p>
+      </div>
+    </>,
   );
 }
+
+const copyBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  padding: "8px 16px",
+  borderRadius: 5,
+  border: `1px solid ${C.borderLight}`,
+  background: "transparent",
+  color: C.muted,
+  cursor: "pointer",
+  marginBottom: 20,
+  transition: "all 0.15s ease",
+};
+
+const primaryBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  padding: "12px 24px",
+  background: C.accent,
+  color: C.white,
+  border: "none",
+  borderRadius: 5,
+  textDecoration: "none",
+  boxShadow: `0 0 10px ${accent(0.3)}`,
+  transition: "opacity 0.15s ease",
+};
+
+const ghostBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  padding: "12px 24px",
+  background: "transparent",
+  color: C.accent,
+  border: `1px solid ${accent(0.4)}`,
+  borderRadius: 5,
+  textDecoration: "none",
+  transition: "background 0.15s ease",
+};
 
 const oauthLight: React.CSSProperties = {
   display: "flex",

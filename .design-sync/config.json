@@ -1,0 +1,21 @@
+{
+  "pkg": "osp-arcade",
+  "globalName": "OSPArcade",
+  "projectId": "a2334634-efce-43cc-b085-c1a7180c60bc",
+  "shape": "package",
+  "cssEntry": "styles.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "CardHeaderBar": { "cardMode": "column" }
+  },
+  "componentSrcMap": {
+    "StatusDot": "src/ui.tsx",
+    "TagPill": "src/ui.tsx",
+    "CardHeaderBar": "src/ui.tsx",
+    "Card": "src/ui.tsx",
+    "NeonTitle": "src/ui.tsx",
+    "Eyebrow": "src/ui.tsx",
+    "C": null,
+    "F": null
+  }
+}
