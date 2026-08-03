@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import "./globals.css";
 import Chrome from "@/components/Chrome";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "OSP Civic Data API - Free Congressional Accountability Data",
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <Chrome>{children}</Chrome>
+        <Analytics />
       </body>
     </html>
   );

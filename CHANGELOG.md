@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.1] - 2026-08-03
+### Added
+- Vercel Analytics: `@vercel/analytics` dependency, with `<Analytics />` rendered in the root
+  layout after the page children. No other layout, metadata, or JSON-LD changes.
+
 ## [1.2.0] - 2026-08-01
 ### Added — `POST /api/v1/keys/mine`, backed by Supabase Auth
 - New route (`app/api/v1/keys/mine/route.ts`) that hands a signed-in user their API key.
