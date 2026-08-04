@@ -31,12 +31,9 @@ const TIERS: Tier[] = [
     name: "DISCOUNTED",
     rate: "10,000",
     price: "Free or reduced",
-    who: "Educators (.edu), 501(c)(3) nonprofits, and researchers. Apply by email.",
+    who: "Educators (.edu), 501(c)(3) nonprofits, and researchers. Apply by getting in touch.",
     tag: "EDU / NPO",
-    cta: {
-      label: "APPLY →",
-      href: "mailto:opensourcepatents@gmail.com?subject=Discounted%20Tier%20Request",
-    },
+    cta: { label: "APPLY →", href: "/contact" },
   },
   {
     name: "PAID",
@@ -162,7 +159,7 @@ export default function PricingPage() {
                   {t.cta.label}
                 </Link>
               ) : (
-                <a
+                <Link
                   href={t.cta.href!}
                   className="dc-btn-ghost"
                   style={{
@@ -184,7 +181,7 @@ export default function PricingPage() {
                   }}
                 >
                   {t.cta.label}
-                </a>
+                </Link>
               )}
             </div>
           </Card>

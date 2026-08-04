@@ -10,7 +10,12 @@
       "Bash(git commit:*)",
       "Bash(npm install *)",
       "Bash(npx tsc *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "WebFetch(domain:opensourceforall.com)",
+      "Bash(curl -s -o /dev/null -w \"contact:%{http_code}\\\\n\" http://localhost:3000/contact)",
+      "Bash(curl -s http://localhost:3000/pricing)",
+      "Bash(curl -s http://localhost:3000/contact)",
+      "Bash(kill %1)"
     ]
   },
   "enabledMcpjsonServers": [

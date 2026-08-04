@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0] - 2026-08-04
+### Added
+- `/contact` (`app/contact/page.tsx`) — the contact page from opensourceforall.com, restyled to this
+  site's arcade-terminal look. Content is the source's: "plain email, no forms, no sales funnel", the
+  three what-to-include prompts, and the read-the-code-first GitHub link. Deliberately has no form
+  and no POST handler — there is nothing to submit. Adds a discounted-tier section, since that's
+  what most visitors will have clicked through for.
+
+### Changed
+- The `APPLY →` button on the discounted tier (`/pricing`) opens `/contact` instead of a
+  `mailto:` link. It now renders as a `next/link` rather than a bare `<a>`, since the ghost-button
+  branch is no longer an external target. Card copy changed from "Apply by email" to match.
+
 ## [1.3.0] - 2026-08-03
 ### Removed — Neon Auth, entirely
 - Supabase Auth has been verified in production as the identity provider, so the Neon Auth path it
