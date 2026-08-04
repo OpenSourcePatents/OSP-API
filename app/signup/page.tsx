@@ -9,10 +9,6 @@ import { CardHeaderBar, TagPill } from "@/components/ui";
 /**
  * Sign-in + API key issuance, on Supabase Auth (Google / GitHub OAuth).
  *
- * Replaces the Neon Auth UI that lived here. The Neon Auth path —
- * /api/auth/[...path], /api/keys, and /auth/success — is deliberately still
- * live until this page is verified in production; only this page moved.
- *
  * Flow: sign in with Supabase → POST /api/v1/keys/mine with the access token
  * as a Bearer header → show the key. A visitor with a persisted session skips
  * straight to the key. The email/password form is gone: OAuth providers hand

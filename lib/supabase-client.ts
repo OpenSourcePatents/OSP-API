@@ -10,7 +10,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * token it produces. Data still comes from CongressWatch JSON and accounts
  * still live in Neon/Drizzle.
  *
- * Constructed lazily for the same reason lib/neon-auth.ts is: createClient
+ * Constructed lazily: createClient
  * throws when its URL/key are absent, and /signup is statically prerendered,
  * so a module-scope client would run during `next build` — which has no env.
  * The NEXT_PUBLIC_* values are inlined into the client bundle at build time;

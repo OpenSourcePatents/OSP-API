@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.3.0] - 2026-08-03
+### Removed — Neon Auth, entirely
+- Supabase Auth has been verified in production as the identity provider, so the Neon Auth path it
+  replaced is gone rather than merely dormant. Deleted `lib/neon-auth.ts`, `lib/neon-auth-client.ts`,
+  `app/api/auth/[...path]/route.ts` (the auth proxy), `app/api/keys/route.ts` (the old
+  `GET`/`POST /api/keys`), and `app/auth/success/page.tsx`. Nothing linked to the success page any
+  more — `/signup` shows the key inline from `POST /api/v1/keys/mine`, which is now the only
+  issuance route.
+- Dropped the `@neondatabase/auth` dependency and the `NEON_AUTH_BASE_URL` /
+  `NEON_AUTH_COOKIE_SECRET` env vars from `.env.local.example` and the README. Both env vars can be
+  deleted from Vercel.
+- The Neon database and Drizzle are untouched: `DATABASE_URL`, `lib/db.ts`, and `lib/schema.ts` are
+  unchanged, and Neon remains the sole database.
+
+### Note
+- `RESEND_API_KEY` is now unread — key delivery by email lived only in the deleted `/api/keys`
+  route. The variable is left declared rather than removed, since restoring email delivery on
+  `/api/v1/keys/mine` is a plausible follow-up.
+
 ## [1.2.1] - 2026-08-03
 ### Added
 - Vercel Analytics: `@vercel/analytics` dependency, with `<Analytics />` rendered in the root

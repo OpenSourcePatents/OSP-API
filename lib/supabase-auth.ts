@@ -4,11 +4,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * Supabase Auth — verifies the access token a signed-in user presents.
  *
  * This is identity only. Congressional data still comes from CongressWatch JSON
- * and accounts still live in Neon/Drizzle; Supabase replaced Neon Auth as the
- * signup provider, nothing else.
+ * and accounts still live in Neon/Drizzle; Supabase is the signup provider,
+ * nothing else.
  *
- * Constructed lazily on first use, for the same reason lib/neon-auth.ts is:
- * createClient throws on a missing URL/key, and building it at module top level
+ * Constructed lazily on first use: createClient throws on a missing URL/key,
+ * and building it at module top level
  * makes `next build` fail while collecting page data, because the build
  * environment has no runtime secrets. Deferring to the first request keeps the
  * build clean and turns a genuinely missing secret into a request-time error.
