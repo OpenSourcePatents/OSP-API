@@ -41,8 +41,8 @@ npm run dev
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | Neon Postgres connection string. **Use the pooled (`-pooler`) host.** |
-| `NEON_AUTH_BASE_URL` | Neon Auth endpoint (`neonctl neon-auth status --project-id <id>`) |
-| `NEON_AUTH_COOKIE_SECRET` | Session cookie signing secret (`openssl rand -base64 32`, 32+ chars) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL — authentication only, no data lives there |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key; the server uses it to verify the caller's own access token |
 | `CONGRESS_DATA_URL` | CongressWatch JSON base URL. Defaults to `https://congresswatch.vercel.app/data` |
 | `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL |
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST token |

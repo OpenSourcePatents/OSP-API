@@ -1,5 +1,111 @@
 # Changelog
 
+## [1.4.0] - 2026-08-04
+### Added
+- `/contact` (`app/contact/page.tsx`) — the contact page from opensourceforall.com, restyled to this
+  site's arcade-terminal look. Content is the source's: "plain email, no forms, no sales funnel", the
+  three what-to-include prompts, and the read-the-code-first GitHub link. Deliberately has no form
+  and no POST handler — there is nothing to submit. Adds a discounted-tier section, since that's
+  what most visitors will have clicked through for.
+
+### Changed
+- The `APPLY →` button on the discounted tier (`/pricing`) opens `/contact` instead of a
+  `mailto:` link. It now renders as a `next/link` rather than a bare `<a>`, since the ghost-button
+  branch is no longer an external target. Card copy changed from "Apply by email" to match.
+
+## [1.3.0] - 2026-08-03
+### Removed — Neon Auth, entirely
+- Supabase Auth has been verified in production as the identity provider, so the Neon Auth path it
+  replaced is gone rather than merely dormant. Deleted `lib/neon-auth.ts`, `lib/neon-auth-client.ts`,
+  `app/api/auth/[...path]/route.ts` (the auth proxy), `app/api/keys/route.ts` (the old
+  `GET`/`POST /api/keys`), and `app/auth/success/page.tsx`. Nothing linked to the success page any
+  more — `/signup` shows the key inline from `POST /api/v1/keys/mine`, which is now the only
+  issuance route.
+- Dropped the `@neondatabase/auth` dependency and the `NEON_AUTH_BASE_URL` /
+  `NEON_AUTH_COOKIE_SECRET` env vars from `.env.local.example` and the README. Both env vars can be
+  deleted from Vercel.
+- The Neon database and Drizzle are untouched: `DATABASE_URL`, `lib/db.ts`, and `lib/schema.ts` are
+  unchanged, and Neon remains the sole database.
+
+### Note
+- `RESEND_API_KEY` is now unread — key delivery by email lived only in the deleted `/api/keys`
+  route. The variable is left declared rather than removed, since restoring email delivery on
+  `/api/v1/keys/mine` is a plausible follow-up.
+
+## [1.2.1] - 2026-08-03
+### Added
+- Vercel Analytics: `@vercel/analytics` dependency, with `<Analytics />` rendered in the root
+  layout after the page children. No other layout, metadata, or JSON-LD changes.
+
+## [1.2.0] - 2026-08-01
+### Added — `POST /api/v1/keys/mine`, backed by Supabase Auth
+- New route (`app/api/v1/keys/mine/route.ts`) that hands a signed-in user their API key.
+  Identity comes from an `Authorization: Bearer <token>` Supabase access token; the request body is
+  never read, so a caller can only act as whoever their token belongs to. Resolution order: a live
+  row already claimed by that `user_id` → an unclaimed row with the same verified email, which is
+  adopted by backfilling `user_id` → otherwise mint a new key. Returns the standard single-object
+  envelope `{ data: { key, tier, created_at } }` (201 on mint, 200 otherwise). `tier` is hardcoded
+  `'free'` on insert and never read from input.
+- `lib/supabase-auth.ts` — verifies the bearer token via `auth.getUser(token)`, which checks
+  signature and expiry server-side. The JWT is never decoded locally. Client is built lazily for the
+  same reason `lib/neon-auth.ts` is: constructing it at module scope breaks `next build`, which has
+  no runtime secrets. Reads `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- `@supabase/supabase-js` added as a dependency.
+- `/signup` now signs in with Supabase Auth (Google/GitHub OAuth, PKCE) instead of the Neon Auth
+  UI, then calls `POST /api/v1/keys/mine` with the access token and shows the key with a copy
+  button and `X-API-Key` usage note. A visitor with a persisted session skips straight to their
+  key. The email/password form is gone — OAuth providers supply a verified email, which is what
+  issuance requires. `lib/supabase-client.ts` holds the lazily-built browser client. The Neon Auth
+  path (`/api/auth/*`, `/api/keys`, `/auth/success`) stays live until this is verified in
+  production; only the signup page moved. Failure handling: a failed code exchange or OAuth error
+  bounce surfaces a generic retryable message (URL error params are never rendered — they're
+  attacker-craftable), the spent `?code=` is scrubbed from the URL, and sign-out verifies the
+  session was actually cleared before saying so.
+
+### Changed
+- `lib/schema.ts` — declared the `user_id` (text, nullable) and `revoked` (boolean, default false)
+  columns that already exist on `api_keys`, plus an index on `user_id`. Drizzle could not query them
+  while they were undeclared. Revoked rows are treated as absent: never returned, never adopted.
+- `CLAUDE.md` — rewrote the history note that forbade `@supabase/supabase-js` and `SUPABASE_*` env
+  vars: Supabase now handles authentication only, and Neon via Drizzle remains the sole database.
+  Congressional data still comes from CongressWatch JSON — Supabase replaced Neon Auth as the
+  identity provider, nothing more.
+
+## [1.1.2] - 2026-07-15
+### Fixed — mobile layout
+- Header (`components/Chrome.tsx`) overflowed narrow screens: the rigid `1fr auto 1fr` grid with a
+  `nowrap` brand + clock + 4 nav links was wider than a phone, and `body { overflow-x: hidden }`
+  clipped the nav. Added class hooks + a `max-width: 760px` media query that stacks the header into
+  centered rows, hides the decorative clock, and lets the nav wrap; `≤380px` also drops the "API v2"
+  tag and tightens nav padding.
+- Hero/pricing titles (`NeonTitle`) rendered at a fixed 64px/40px and overflowed phones. Font size and
+  letter-spacing are now `min(px, vw)` — fluid below the cap, unchanged on desktop.
+- Landing stat strip: number size and cell padding are now viewport-relative so the four columns don't
+  clip under ~360px.
+
+## [1.1.1] - 2026-07-15
+### Fixed
+- Favicon was referenced in `app/layout.tsx` but the file was missing from `public/` — the tab icon
+  was broken. Added the OSP icon set (`favicon.ico`, `icon-32.png`, `apple-touch-icon.png`, copied
+  from osp-portal) and expanded the `metadata.icons` config to serve all three.
+
+## [1.1.0] - 2026-07-14
+### Added — "Arcade terminal" redesign of all public pages
+- Reskinned landing, docs, pricing, signup, and auth-success pages to a dark neon aesthetic
+  (blue `#3b82f6` accent) from the Claude Design project: matrix-grid + vignette + scanline
+  overlays, neon-flicker titles, a live header clock, and card chrome with LIVE-dot + tag bars.
+- `app/globals.css` — font `@import` (Oxanium / IBM Plex Mono / Barlow), keyframes, hover/focus
+  utility classes, and a `prefers-reduced-motion` guard that stills the animated chrome.
+- `lib/theme.ts` — shared color + font tokens. `components/Chrome.tsx` — shared shell (overlays,
+  sticky header with live clock + route-aware nav, footer) wired into the layout.
+  `components/ui.tsx` — NeonTitle, Card, CardHeaderBar, TagPill, StatusDot, Eyebrow.
+- `public/osp-logo.jpg` for the header. `favicon.ico` referenced in the layout (dropped in separately).
+
+### Note
+- All page logic preserved: signup keeps the full Neon Auth flow and password-strength meter;
+  auth-success keeps the key-mint-over-session-cookie fetch + copy. Docs keeps full 13-endpoint
+  coverage. Rate-limit copy reads 429 (the real status), not the mockup's 401.
+
 ## [1.0.0] - 2026-07-14
 ### Changed — BREAKING: Supabase removed entirely; both databases replaced
 The Supabase projects backing this API were deleted. Both halves have been rebuilt on new

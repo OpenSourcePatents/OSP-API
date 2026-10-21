@@ -10,11 +10,11 @@ OSP-API is a free, open-source REST API aggregating congressional accountability
 
 - **Framework:** Next.js 16 App Router (TypeScript)
 - **Data source:** [CongressWatch](https://github.com/OpenSourcePatents/Congresswatch) static JSON over CDN — **no database in the data path**
-- **API keys / accounts:** Neon Postgres (Drizzle ORM) + Neon Auth (Managed BetterAuth)
+- **API keys / accounts:** Neon Postgres (Drizzle ORM) + Supabase Auth (identity only)
 - **Rate limiting:** Redis via `@upstash/ratelimit` (sliding window, per tier) — **fails open if unavailable**
-- **Email:** Resend, for delivering the API key on issuance
+- **Email:** Resend — currently unused. `POST /api/v1/keys/mine` returns the key in its response; the emailing route was removed with Neon Auth. `RESEND_API_KEY` is still declared but nothing reads it.
 
-> **History (read this before touching the data layer):** this API originally ran on two Supabase projects — one for `api_keys` + GoTrue auth, one holding the congressional data. Both were deleted. The Upstash Redis instance was deleted too. Do not reintroduce `@supabase/supabase-js`, `lib/supabase.ts`, or any `SUPABASE_*` env var; they are gone deliberately.
+> **History (read this before touching the data layer):** this API originally ran on two Supabase projects — one for `api_keys` + GoTrue auth, one holding the congressional data. Both were deleted, and the API was rebuilt on Neon + CongressWatch JSON. Supabase has since returned for **authentication only**: `lib/supabase-auth.ts` verifies Supabase access tokens (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) for `POST /api/v1/keys/mine`. Neon Auth (Managed BetterAuth) was the identity provider in between and has been **removed entirely** — do not reintroduce `@neondatabase/auth`, `NEON_AUTH_*`, `/api/auth/*`, or `POST /api/keys`. Neon via Drizzle remains the **sole database** — do not store or query data in Supabase, and do not reintroduce a Supabase data client.
 
 ## Commands
 
@@ -40,7 +40,7 @@ CongressWatch pipeline → commits JSON to git → congresswatch.vercel.app/data
 - `lib/db.ts` / `lib/schema.ts` — Neon Postgres via Drizzle. Module-scope `pg.Pool` + `attachDatabasePool` (required for Vercel Fluid compute).
 - `lib/auth.ts` — `validateApiKey()`: `X-API-Key` → Neon lookup → rate limit → usage increment.
 - `lib/redis.ts` — tiered rate limiters. Reads `KV_REST_API_*` or `UPSTASH_REDIS_REST_*`.
-- `lib/neon-auth.ts` / `lib/neon-auth-client.ts` — Neon Auth server + browser clients.
+- `lib/supabase-auth.ts` / `lib/supabase-client.ts` — Supabase Auth: server-side bearer-token verification for `/api/v1/keys/mine`, and the browser sign-in client used by `/signup` (Google/GitHub OAuth, PKCE).
 - `lib/handlers.ts` — `memberCollection()` factory shared by the five member sub-collection routes.
 - `lib/response.ts` — `ok()`, `paginated()`, `err()`, `options()` with CORS baked in.
 
@@ -67,3 +67,13 @@ CongressWatch pipeline → commits JSON to git → congresswatch.vercel.app/data
 ## Changelog convention
 
 Update `CHANGELOG.md` on every change: semver + date + description.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

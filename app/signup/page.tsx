@@ -1,30 +1,21 @@
 "use client";
 
-import { Suspense, useState, FormEvent, useEffect, useMemo } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { authClient } from "@/lib/neon-auth-client";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { getSupabase } from "@/lib/supabase-client";
+import { C, F, accent, green } from "@/lib/theme";
+import { CardHeaderBar, TagPill } from "@/components/ui";
+
+/**
+ * Sign-in + API key issuance, on Supabase Auth (Google / GitHub OAuth).
+ *
+ * Flow: sign in with Supabase → POST /api/v1/keys/mine with the access token
+ * as a Bearer header → show the key. A visitor with a persisted session skips
+ * straight to the key. The email/password form is gone: OAuth providers hand
+ * us a verified email, which is what key issuance requires.
+ */
 
 // --- SVG icons ---
-
-function EyeIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function EyeOffIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  );
-}
 
 function GoogleIcon() {
   return (
@@ -45,50 +36,6 @@ function GitHubIcon() {
   );
 }
 
-// --- Password helpers ---
-
-const PW_RULES = [
-  { key: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
-  { key: "upper", label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
-  { key: "number", label: "One number", test: (p: string) => /\d/.test(p) },
-  { key: "special", label: "One special character (!@#$%^&*)", test: (p: string) => /[!@#$%^&*]/.test(p) },
-] as const;
-
-function getStrength(password: string): { label: string; color: string; pct: number } {
-  const passed = PW_RULES.filter((r) => r.test(password)).length;
-  if (passed <= 1) return { label: "Weak", color: "#ef4444", pct: 25 };
-  if (passed <= 2) return { label: "Fair", color: "#f59e0b", pct: 50 };
-  if (passed <= 3) return { label: "Good", color: "#eab308", pct: 75 };
-  return { label: "Strong", color: "#22c55e", pct: 100 };
-}
-
-function PasswordInput({
-  value,
-  onChange,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-}) {
-  const [show, setShow] = useState(false);
-  return (
-    <div style={s.pwWrap}>
-      <input
-        type={show ? "text" : "password"}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        required
-        style={s.input}
-      />
-      <button type="button" onClick={() => setShow(!show)} style={s.eyeBtn} aria-label={show ? "Hide password" : "Show password"}>
-        {show ? <EyeOffIcon /> : <EyeIcon />}
-      </button>
-    </div>
-  );
-}
-
 function errMessage(e: unknown): string {
   if (e && typeof e === "object" && "message" in e) {
     return String((e as { message: unknown }).message);
@@ -96,449 +43,395 @@ function errMessage(e: unknown): string {
   return "Something went wrong. Please try again.";
 }
 
-// --- Main form ---
+type State =
+  | { status: "checking" } // is there a persisted session?
+  | { status: "signedOut" }
+  | { status: "fetching" } // signed in, key request in flight
+  | { status: "ok"; key: string; tier: string; created: boolean }
+  | { status: "error"; message: string };
 
-type Mode = "signup" | "signin";
-
-function AuthForm() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  const [mode, setMode] = useState<Mode>("signup");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const err = searchParams.get("error");
-    if (err) setError("Sign-in failed. Please try again.");
-  }, [searchParams]);
-
-  const ruleResults = useMemo(() => PW_RULES.map((r) => ({ ...r, met: r.test(password) })), [password]);
-  const allRulesMet = ruleResults.every((r) => r.met);
-  const passwordsMatch = password.length > 0 && password === confirm;
-  const strength = useMemo(() => getStrength(password), [password]);
-
-  const canSubmit =
-    mode === "signup"
-      ? email.length > 0 && allRulesMet && passwordsMatch && !loading
-      : email.length > 0 && password.length > 0 && !loading;
-
-  async function social(provider: "google" | "github") {
-    setError("");
-    try {
-      await authClient.signIn.social({ provider, callbackURL: "/auth/success" });
-    } catch (e) {
-      setError(errMessage(e));
-    }
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setError("");
-    setMessage("");
-    setLoading(true);
-
-    try {
-      if (mode === "signup") {
-        await authClient.signUp.email({ email, password, name: email });
-        // Neon Auth sends the verification email. The key is only minted once the
-        // address is verified, so we can't hand one out yet.
-        setMessage(
-          "Check your email to verify your address. Once verified, sign in and your API key will be issued.",
-        );
-      } else {
-        await authClient.signIn.email({ email, password });
-        router.push("/auth/success");
-      }
-    } catch (err) {
-      setError(errMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div style={s.card}>
-      <h1 style={s.title}>OSP Civic Data API</h1>
-      <p style={s.subtitle}>
-        {mode === "signup"
-          ? "Create an account to get your free API key. You'll need to verify your email first."
-          : "Sign in to retrieve your API key."}
-      </p>
-
-      {message ? (
-        <div style={s.successBox}>
-          <p style={s.successLabel}>Almost there!</p>
-          <p style={s.successText}>{message}</p>
-          <button
-            onClick={() => {
-              setMessage("");
-              setMode("signin");
-              setPassword("");
-              setConfirm("");
-            }}
-            style={s.ghost}
-          >
-            Go to sign in
-          </button>
-        </div>
-      ) : (
-        <>
-          <div style={s.oauthGroup}>
-            <button type="button" onClick={() => social("google")} style={s.oauthBtn}>
-              <GoogleIcon /> Continue with Google
-            </button>
-            <button type="button" onClick={() => social("github")} style={s.oauthBtnDark}>
-              <GitHubIcon /> Continue with GitHub
-            </button>
-          </div>
-
-          <div style={s.orDivider}>
-            <span style={s.orLine} />
-            <span style={s.orText}>or continue with email</span>
-            <span style={s.orLine} />
-          </div>
-
-          <form onSubmit={handleSubmit} style={s.form}>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              style={s.input}
-            />
-
-            <PasswordInput value={password} onChange={setPassword} placeholder="Password" />
-
-            {mode === "signup" && password.length > 0 && (
-              <>
-                <div style={s.strengthWrap}>
-                  <div style={s.strengthTrack}>
-                    <div style={{ ...s.strengthFill, width: `${strength.pct}%`, backgroundColor: strength.color }} />
-                  </div>
-                  <span style={{ ...s.strengthLabel, color: strength.color }}>{strength.label}</span>
-                </div>
-
-                <ul style={s.ruleList}>
-                  {ruleResults.map((r) => (
-                    <li key={r.key} style={{ ...s.ruleItem, color: r.met ? "#22c55e" : "#555" }}>
-                      <span style={s.ruleIcon}>{r.met ? "✓" : "✗"}</span> {r.label}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            {mode === "signup" && (
-              <>
-                <PasswordInput value={confirm} onChange={setConfirm} placeholder="Confirm password" />
-                {confirm.length > 0 && !passwordsMatch && (
-                  <p style={s.mismatch}>Passwords do not match</p>
-                )}
-              </>
-            )}
-
-            <button type="submit" disabled={!canSubmit} style={{ ...s.button, opacity: canSubmit ? 1 : 0.45 }}>
-              {loading
-                ? mode === "signup"
-                  ? "Creating account..."
-                  : "Signing in..."
-                : mode === "signup"
-                  ? "Sign Up"
-                  : "Sign In"}
-            </button>
-            {error && <p style={s.error}>{error}</p>}
-          </form>
-
-          <p style={s.switchNote}>
-            {mode === "signup" ? "Already have an account? " : "Need an account? "}
-            <button
-              type="button"
-              onClick={() => {
-                setMode(mode === "signup" ? "signin" : "signup");
-                setError("");
-                setPassword("");
-                setConfirm("");
-              }}
-              style={s.linkBtn}
-            >
-              {mode === "signup" ? "Sign in" : "Sign up"}
-            </button>
-          </p>
-        </>
-      )}
-
-      <div style={s.divider} />
-
-      <p style={s.note}>
-        Educators, nonprofits, and researchers can apply for discounted access
-        (10,000 req/hr) &mdash; email{" "}
-        <a href="mailto:opensourcepatents@gmail.com" style={s.link}>opensourcepatents@gmail.com</a>
-      </p>
-      <p style={s.note}>
-        <a href="/pricing" style={s.link}>View all tiers &rarr;</a>
-      </p>
-    </div>
-  );
-}
+/** How long to wait on an OAuth code exchange before assuming it failed. */
+const OAUTH_EXCHANGE_TIMEOUT_MS = 8000;
 
 export default function SignupPage() {
-  return (
-    <div style={s.page}>
-      <Suspense fallback={<div style={s.card}><p style={s.subtitle}>Loading...</p></div>}>
-        <AuthForm />
-      </Suspense>
+  const [state, setState] = useState<State>({ status: "checking" });
+  // Sign-in failures shown inline on the signed-out card, distinct from the
+  // fatal error state — the user can simply try the buttons again.
+  const [oauthError, setOauthError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  // Read by timer callbacks that must not act on a stale status. The check
+  // lives in the callbacks, not in setState updaters — updaters must stay pure
+  // (strict mode double-invokes them).
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  });
+
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    // Deduped per effect run, not per component: the only way to sign in again
+    // after signing out is the OAuth redirect, which remounts the page.
+    let started = false;
+    const supabase = getSupabase();
+
+    setState({ status: "checking" });
+
+    // An OAuth failure bounces back with error params rather than a code.
+    // Show a generic message — the param text is attacker-influenceable
+    // (anyone can craft a link to this page), so it is never rendered — and
+    // clean the URL so a reload doesn't re-show it.
+    const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    const failed = ["error", "error_description"].some(
+      (p) => search.has(p) || hash.has(p),
+    );
+    const returningFromOAuth = search.has("code");
+    if (failed) {
+      setOauthError("Sign-in failed. Please try again.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
+    async function fetchKey(token: string) {
+      if (started) return;
+      started = true;
+      setState({ status: "fetching" });
+      try {
+        const res = await fetch("/api/v1/keys/mine", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const body = await res.json();
+        if (cancelled) return;
+
+        if (!res.ok) {
+          setState({
+            status: "error",
+            message: body.error ?? "Could not issue an API key.",
+          });
+          return;
+        }
+        setState({
+          status: "ok",
+          key: body.data.key,
+          tier: body.data.tier,
+          created: res.status === 201,
+        });
+      } catch {
+        if (!cancelled) {
+          setState({ status: "error", message: "Network error. Please try again." });
+        }
+      }
+    }
+
+    // getSession waits for client init — including the ?code= exchange on an
+    // OAuth return — so a session here covers both the returning visitor and
+    // the fresh login. The subscription below is the backstop for a session
+    // that lands after this resolves.
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      if (data.session) {
+        void fetchKey(data.session.access_token);
+      } else if (!returningFromOAuth) {
+        setState((s) => (s.status === "checking" ? { status: "signedOut" } : s));
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (session && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        void fetchKey(session.access_token);
+      } else if (event === "SIGNED_OUT") {
+        // A failed ?code= exchange surfaces as SIGNED_OUT, not as error params:
+        // auth-js discards the dead session and fires this event. Before the
+        // key fetch has started, that means the sign-in itself failed — say so,
+        // and drop the spent code from the URL (auth-js strips it only on
+        // success).
+        if (returningFromOAuth && !started) {
+          setOauthError("Could not complete sign-in. Please try again.");
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+        setState({ status: "signedOut" });
+      }
+    });
+
+    // A ?code= that never becomes a session and never fires an event (e.g.
+    // opened in a browser without the PKCE verifier, or a hung exchange) would
+    // otherwise spin forever. Status is read via stateRef out here, keeping the
+    // setState updater pure.
+    const timer = returningFromOAuth
+      ? setTimeout(() => {
+          if (cancelled || stateRef.current.status !== "checking") return;
+          setOauthError("Could not complete sign-in. Please try again.");
+          window.history.replaceState(null, "", window.location.pathname);
+          setState({ status: "signedOut" });
+        }, OAUTH_EXCHANGE_TIMEOUT_MS)
+      : null;
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [attempt]);
+
+  async function social(provider: "google" | "github") {
+    setOauthError("");
+    try {
+      const { error } = await getSupabase().auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: `${window.location.origin}/signup` },
+      });
+      // On success the browser navigates away; an error means it didn't start.
+      if (error) setOauthError(error.message);
+    } catch (e) {
+      setOauthError(errMessage(e));
+    }
+  }
+
+  async function signOut() {
+    const supabase = getSupabase();
+    let error: unknown = null;
+    try {
+      // signOut resolves with { error } rather than throwing, and on failure
+      // (offline, 5xx) auth-js keeps the localStorage session. Global revoke
+      // first; if the server rejects it, retry revoking just this session.
+      ({ error } = await supabase.auth.signOut());
+      if (error) ({ error } = await supabase.auth.signOut({ scope: "local" }));
+    } catch (e) {
+      error = e;
+    }
+    if (error) {
+      // The session survived — claiming "signed out" would be false: the next
+      // load of this page would silently sign the user straight back in.
+      setState({
+        status: "error",
+        message: "Could not sign out. Check your connection and try again.",
+      });
+      return;
+    }
+    setState({ status: "signedOut" });
+  }
+
+  async function copy(key: string) {
+    try {
+      await navigator.clipboard.writeText(key);
+      setCopied(true);
+      // Reset any previous timer so a rapid re-copy doesn't flip the label
+      // back moments after it re-appears; cleared on unmount above.
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard unavailable — key is on screen anyway */
+    }
+  }
+
+  const shell = (headerBar: React.ReactNode, body: React.ReactNode) => (
+    <div style={{ minHeight: "calc(100vh - 56px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 460, width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
+        {headerBar}
+        <div style={{ padding: "24px 20px" }}>{body}</div>
+      </div>
     </div>
+  );
+
+  const titleStyle: React.CSSProperties = {
+    fontFamily: F.display,
+    fontSize: 18,
+    fontWeight: 800,
+    color: C.white,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  };
+
+  if (state.status === "checking" || state.status === "fetching") {
+    return shell(
+      <CardHeaderBar label="WORKING" right={<TagPill>PENDING</TagPill>} />,
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 12 }}>
+          {state.status === "checking" ? "Checking session…" : "Issuing your API key…"}
+        </h1>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted }}>One moment.</p>
+      </>,
+    );
+  }
+
+  if (state.status === "error") {
+    return shell(
+      <CardHeaderBar dotColor="#ef4444" label="ERROR" labelColor="#ef4444" right={<TagPill color="#ef4444">FAILED</TagPill>} />,
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 16 }}>Something went wrong</h1>
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>{state.message}</p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button onClick={() => setAttempt((a) => a + 1)} className="dc-btn-primary" style={{ ...primaryBtn, cursor: "pointer" }}>
+            TRY AGAIN
+          </button>
+          <button onClick={signOut} className="dc-btn-ghost" style={{ ...ghostBtn, cursor: "pointer" }}>
+            SIGN OUT
+          </button>
+        </div>
+      </>,
+    );
+  }
+
+  if (state.status === "ok") {
+    return shell(
+      <CardHeaderBar
+        dotColor={C.success}
+        label="KEY ISSUED"
+        labelColor={green(0.7)}
+        right={<TagPill color={C.success} borderColor={green(0.3)}>SUCCESS</TagPill>}
+      />,
+      <>
+        <h1 style={{ ...titleStyle, marginBottom: 16 }}>{state.created ? "You're all set" : "Welcome back"}</h1>
+
+        <p style={{ fontFamily: F.display, fontSize: 9, fontWeight: 600, letterSpacing: 1.5, color: C.success, textTransform: "uppercase", marginBottom: 6 }}>
+          YOUR API KEY
+        </p>
+        <div style={{ background: C.surfaceInk, border: `1px solid ${C.borderLight}`, borderRadius: 5, padding: 14, marginBottom: 8, overflowX: "auto" }}>
+          <code style={{ fontFamily: F.mono, fontSize: 13, color: C.text, wordBreak: "break-all" }}>{state.key}</code>
+        </div>
+        <button onClick={() => copy(state.key)} className="dc-copy" style={copyBtn}>
+          {copied ? "COPIED ✓" : "COPY KEY"}
+        </button>
+
+        <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.6, marginBottom: 6 }}>
+          Send it in the <code style={{ fontFamily: F.mono, fontSize: 13, color: C.text }}>X-API-Key</code> header with every request:
+        </p>
+        <div style={{ background: C.surfaceInk, border: `1px solid ${C.borderLight}`, borderRadius: 5, padding: 14, marginBottom: 20, overflowX: "auto" }}>
+          <pre style={{ fontFamily: F.mono, fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.5 }}>X-API-Key: {state.key}</pre>
+        </div>
+
+        <p style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginBottom: 20, letterSpacing: 0.3 }}>
+          Tier: <span style={{ color: C.muted }}>{state.tier}</span> ·{" "}
+          <Link href="/pricing" style={{ color: C.accent, borderBottom: `1px dotted ${C.accent}`, textDecoration: "none" }}>
+            View all tiers
+          </Link>
+        </p>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link href="/docs" className="dc-btn-primary" style={primaryBtn}>
+            VIEW API DOCS →
+          </Link>
+          <button onClick={signOut} className="dc-btn-ghost" style={{ ...ghostBtn, cursor: "pointer" }}>
+            SIGN OUT
+          </button>
+        </div>
+      </>,
+    );
+  }
+
+  // signedOut
+  return shell(
+    <CardHeaderBar right={<TagPill>AUTH</TagPill>} />,
+    <>
+      <h1 style={{ ...titleStyle, marginBottom: 6 }}>SIGN IN</h1>
+      <p style={{ fontFamily: F.body, fontSize: 14, color: C.muted, lineHeight: 1.5, marginBottom: 20 }}>
+        Sign in to get your free API key. New accounts are created automatically.
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button type="button" onClick={() => social("google")} className="dc-oauth" style={oauthLight}>
+          <GoogleIcon /> Continue with Google
+        </button>
+        <button type="button" onClick={() => social("github")} className="dc-oauth" style={oauthDark}>
+          <GitHubIcon /> Continue with GitHub
+        </button>
+      </div>
+
+      {oauthError && (
+        <p style={{ color: "#ef4444", fontFamily: F.body, fontSize: 13, marginTop: 12, marginBottom: 0 }}>{oauthError}</p>
+      )}
+
+      <div style={{ borderTop: `1px solid ${C.border}`, marginTop: 20, paddingTop: 14 }}>
+        <p style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, lineHeight: 1.6, letterSpacing: 0.3 }}>
+          Educators, nonprofits, and researchers can apply for discounted access (10,000 req/hr) — email{" "}
+          <a href="mailto:opensourcepatents@gmail.com" style={{ color: C.accent, borderBottom: `1px dotted ${C.accent}`, textDecoration: "none" }}>
+            opensourcepatents@gmail.com
+          </a>
+        </p>
+      </div>
+    </>,
   );
 }
 
-// --- Styles ---
+const copyBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: 1,
+  textTransform: "uppercase",
+  padding: "8px 16px",
+  borderRadius: 5,
+  border: `1px solid ${C.borderLight}`,
+  background: "transparent",
+  color: C.muted,
+  cursor: "pointer",
+  marginBottom: 20,
+  transition: "all 0.15s ease",
+};
 
-const s: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: "100vh",
-    backgroundColor: "#0a0a0f",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "2rem",
-    fontFamily: "system-ui, -apple-system, sans-serif",
-  },
-  card: {
-    maxWidth: 480,
-    width: "100%",
-    backgroundColor: "#12121a",
-    borderRadius: 12,
-    padding: "2.5rem",
-    border: "1px solid #1e1e2e",
-  },
-  title: {
-    color: "#ffffff",
-    fontSize: "1.5rem",
-    fontWeight: 700,
-    margin: 0,
-  },
-  subtitle: {
-    color: "#888",
-    fontSize: "0.95rem",
-    marginTop: "0.5rem",
-    marginBottom: "1.5rem",
-    lineHeight: 1.5,
-  },
+const primaryBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  padding: "12px 24px",
+  background: C.accent,
+  color: C.white,
+  border: "none",
+  borderRadius: 5,
+  textDecoration: "none",
+  boxShadow: `0 0 10px ${accent(0.3)}`,
+  transition: "opacity 0.15s ease",
+};
 
-  oauthGroup: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "0.5rem",
-    marginBottom: "1rem",
-  },
-  oauthBtn: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "0.5rem",
-    padding: "0.7rem 1rem",
-    borderRadius: 8,
-    border: "1px solid #2a2a3a",
-    backgroundColor: "#fff",
-    color: "#111",
-    fontSize: "0.9rem",
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  oauthBtnDark: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "0.5rem",
-    padding: "0.7rem 1rem",
-    borderRadius: 8,
-    border: "1px solid #2a2a3a",
-    backgroundColor: "#24292f",
-    color: "#fff",
-    fontSize: "0.9rem",
-    fontWeight: 600,
-    cursor: "pointer",
-  },
+const ghostBtn: React.CSSProperties = {
+  fontFamily: F.display,
+  fontSize: 12,
+  fontWeight: 600,
+  letterSpacing: 1.5,
+  textTransform: "uppercase",
+  padding: "12px 24px",
+  background: "transparent",
+  color: C.accent,
+  border: `1px solid ${accent(0.4)}`,
+  borderRadius: 5,
+  textDecoration: "none",
+  transition: "background 0.15s ease",
+};
 
-  orDivider: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.75rem",
-    margin: "0.25rem 0 1rem",
-  },
-  orLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#1e1e2e",
-  },
-  orText: {
-    color: "#555",
-    fontSize: "0.75rem",
-    textTransform: "uppercase" as const,
-    letterSpacing: "0.05em",
-    whiteSpace: "nowrap" as const,
-  },
+const oauthLight: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  padding: "12px 16px",
+  borderRadius: 5,
+  border: `1px solid ${C.borderLight}`,
+  background: "#fff",
+  color: "#111",
+  fontFamily: F.body,
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: "pointer",
+  transition: "opacity 0.15s ease",
+};
 
-  form: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "0.6rem",
-  },
-  input: {
-    padding: "0.75rem 1rem",
-    borderRadius: 8,
-    border: "1px solid #2a2a3a",
-    backgroundColor: "#0a0a0f",
-    color: "#fff",
-    fontSize: "1rem",
-    outline: "none",
-    width: "100%",
-    boxSizing: "border-box" as const,
-  },
-  pwWrap: {
-    position: "relative" as const,
-  },
-  eyeBtn: {
-    position: "absolute" as const,
-    right: 10,
-    top: "50%",
-    transform: "translateY(-50%)",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    padding: 4,
-    display: "flex",
-    alignItems: "center",
-  },
-
-  strengthWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: "0.5rem",
-  },
-  strengthTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: "#1e1e2e",
-    borderRadius: 2,
-    overflow: "hidden" as const,
-  },
-  strengthFill: {
-    height: "100%",
-    borderRadius: 2,
-    transition: "width 0.2s, background-color 0.2s",
-  },
-  strengthLabel: {
-    fontSize: "0.7rem",
-    fontWeight: 600,
-    minWidth: 42,
-    textAlign: "right" as const,
-  },
-
-  ruleList: {
-    listStyle: "none",
-    margin: 0,
-    padding: 0,
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "0.15rem",
-  },
-  ruleItem: {
-    fontSize: "0.75rem",
-    transition: "color 0.15s",
-  },
-  ruleIcon: {
-    display: "inline-block",
-    width: 14,
-    textAlign: "center" as const,
-    marginRight: 2,
-  },
-
-  mismatch: {
-    color: "#ef4444",
-    fontSize: "0.75rem",
-    margin: 0,
-  },
-
-  button: {
-    padding: "0.75rem 1rem",
-    borderRadius: 8,
-    border: "none",
-    backgroundColor: "#3b82f6",
-    color: "#fff",
-    fontSize: "1rem",
-    fontWeight: 600,
-    cursor: "pointer",
-    transition: "opacity 0.15s",
-    marginTop: "0.25rem",
-  },
-  error: {
-    color: "#ef4444",
-    fontSize: "0.875rem",
-    margin: 0,
-  },
-  successBox: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: "0.5rem",
-  },
-  successLabel: {
-    color: "#22c55e",
-    fontWeight: 600,
-    fontSize: "1rem",
-    margin: 0,
-  },
-  successText: {
-    color: "#aaa",
-    fontSize: "0.9rem",
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  ghost: {
-    marginTop: "0.5rem",
-    padding: "0.5rem 1rem",
-    borderRadius: 8,
-    border: "1px solid #2a2a3a",
-    backgroundColor: "transparent",
-    color: "#888",
-    fontSize: "0.85rem",
-    cursor: "pointer",
-  },
-  switchNote: {
-    color: "#666",
-    fontSize: "0.85rem",
-    textAlign: "center" as const,
-    marginTop: "1rem",
-    marginBottom: 0,
-  },
-  linkBtn: {
-    background: "none",
-    border: "none",
-    padding: 0,
-    color: "#3b82f6",
-    fontSize: "0.85rem",
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  divider: {
-    borderTop: "1px solid #1e1e2e",
-    margin: "1.5rem 0",
-  },
-  note: {
-    color: "#555",
-    fontSize: "0.8rem",
-    lineHeight: 1.5,
-    margin: "0.4rem 0",
-  },
-  link: {
-    color: "#3b82f6",
-    textDecoration: "none",
-  },
+const oauthDark: React.CSSProperties = {
+  ...oauthLight,
+  background: "#24292f",
+  color: "#fff",
 };
