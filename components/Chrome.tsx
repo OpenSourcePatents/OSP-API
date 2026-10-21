@@ -210,8 +210,8 @@ function Footer() {
       </p>
       <div className="osp-powered-by">
         <a className="osp-powered-link" href="https://opensourceforall.com" target="_blank" rel="noopener noreferrer">
-          <LogoBadge decorative />
           <span>Powered by OSP</span>
+          <LogoBadge decorative />
         </a>
       </div>
     </footer>

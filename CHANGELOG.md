@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.2] - 2026-10-20
+### Changed
+- Moved the footer logo to the right of "Powered by OSP".
+
 ## [1.4.1] - 2026-10-20
 ### Changed
 - Replaced the corner logo with the osp-portal badge, including its rotating motto and reduced-motion support.
