@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import "./globals.css";
+import "./branding.css";
 import Chrome from "@/components/Chrome";
 import { Analytics } from "@vercel/analytics/next";
 

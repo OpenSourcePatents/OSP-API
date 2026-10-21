@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.1] - 2026-10-20
+### Changed
+- Replaced the corner logo with the osp-portal badge, including its rotating motto and reduced-motion support.
+- Added a shared "Powered by OSP" footer credit adapted from uw-site, using the new logo.
+
 ## [1.4.0] - 2026-08-04
 ### Added
 - `/contact` (`app/contact/page.tsx`) — the contact page from opensourceforall.com, restyled to this

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { C, F, accent } from "@/lib/theme";
+import LogoBadge from "@/app/components/LogoBadge";
 
 /** Live HH:MM:SS clock in the neon double-layer style. */
 function NeonClock() {
@@ -121,20 +122,7 @@ function Header() {
           className="dc-brand"
           style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", minWidth: 0 }}
         >
-          <img
-            src="/osp-logo.jpg"
-            alt="OSP"
-            className="dc-logo"
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              border: `1px solid ${accent(0.3)}`,
-              boxShadow: `0 0 8px ${accent(0.4)}`,
-              animation: "logo-spin 8s linear infinite",
-              flexShrink: 0,
-            }}
-          />
+          <LogoBadge decorative />
           <span
             style={{
               fontFamily: F.display,
@@ -220,6 +208,12 @@ function Footer() {
       <p style={{ fontFamily: F.mono, fontSize: 9, color: "#333", letterSpacing: 1, marginTop: 8 }}>
         AGPL-3.0 · DATA FROM CONGRESSWATCH · 100% PUBLIC RECORDS
       </p>
+      <div className="osp-powered-by">
+        <a className="osp-powered-link" href="https://opensourceforall.com" target="_blank" rel="noopener noreferrer">
+          <LogoBadge decorative />
+          <span>Powered by OSP</span>
+        </a>
+      </div>
     </footer>
   );
 }

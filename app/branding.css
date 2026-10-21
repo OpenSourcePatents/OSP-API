@@ -1,0 +1,68 @@
+.osp-logo-badge {
+  display: inline-block;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+.osp-logo-center {
+  position: absolute;
+  inset: 15.5556%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #000;
+  border: 1px solid #1e1e2e;
+  box-shadow: 0 0 26px rgb(59 130 246 / 16%);
+}
+.osp-logo-center img {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 148%;
+  height: 148%;
+  max-width: none;
+  display: block;
+  transform: translate(-50%, -50%);
+}
+.osp-logo-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform-origin: center;
+  animation: osp-logo-orbit 28s linear infinite;
+  fill: #fff;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+}
+.osp-powered-by {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #1e1e2e;
+}
+.osp-powered-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.71875rem;
+  font-weight: 400;
+  letter-spacing: 0.15em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: #aaa;
+  text-decoration: none;
+}
+.osp-powered-link:hover { color: #fff; }
+.osp-powered-link:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 5px;
+}
+@keyframes osp-logo-orbit {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .osp-logo-ring { animation: none; }
+}
