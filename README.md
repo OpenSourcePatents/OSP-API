@@ -68,9 +68,11 @@ Rate limits: free 1,000/hr · discounted 10,000/hr · paid 10,000/hr · admin un
 
 ## Notable implementation details
 
-**The score breakdown is recomputed, not read.** CongressWatch persists only the final integer `score`; the six weighted components are discarded. Every *input* survives in the JSON, so `lib/scoring.ts` is a port of its `compute_score()` (`fetch_finance.py:312`) that returns the components. Verified: running CongressWatch's own Python function against the same live JSON produces identical totals.
+**The score breakdown is recomputed, not read.** `lib/scoring.ts` mirrors CongressWatch's corrected `compute_score_components()`. Existing response keys and component maxima are preserved for compatibility. `wealth_gap` now always scores zero: campaign receipts are not personal wealth. Trade activity and sponsored travel exclude future dates. Attendance requires at least 20 recorded votes, exempts non-voting House delegates and the Resident Commissioner, and reaches its five-point maximum at 25% missed votes.
 
-The `/score` response therefore returns `stored` (what CongressWatch saved), `total` (recomputed now), and `drift` between them. Drift is usually 0 but is legitimately non-zero — the score is only recomputed by CongressWatch's finance job, while votes/trades/travel refresh on their own schedules, so a stored score can lag its own inputs.
+The legacy keys `trade_timing`, `donor_alignment`, and `foreign_travel` describe activity, donor-industry keyword overlap, and disclosed sponsored travel, not established misconduct or foreign-only travel. Bill similarity does not establish authorship. The suspended wealth component is not redistributed, so the currently attainable maximum is 75, while the response retains the historical 100-point scale.
+
+The `/score` response returns `stored` (what CongressWatch saved), `total` (recomputed now), and `drift`. Drift can reflect data refresh lag, changed methodology, or sliding date windows. Deploy the corresponding CongressWatch update alongside this API change to minimize methodology drift.
 
 **`/v1/trades` and `/v1/bills` build an index at runtime.** CongressWatch publishes trades and bills only *inside* per-member detail files, so there is no single document to page over. `lib/aggregate.ts` fans out across all 536 detail files (~15 MB, ~1–3 s cold, ~240 ms warm) and caches the flattened result for an hour. If CongressWatch ever emits `data/trades.json` and `data/bills.json`, delete that module and read them directly.
 
