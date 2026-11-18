@@ -4,7 +4,7 @@
  * campaign receipts are not personal wealth. Stored scores can differ because
  * upstream data, methodology, and rolling date windows change between refreshes.
  */
-import type { MemberSummary, MemberDetail } from "./congress";
+import type { MemberSummary, MemberDetail, Bill } from "./congress";
 import { parseDateAny } from "./congress";
 
 const NON_VOTING_STATES = new Set([
@@ -76,6 +76,57 @@ export function hasVerifiedSecSignals(member: MemberSummary): boolean {
     && member.corporate_insider_signals >= 0;
 }
 
+const BILL_ANALYSIS_VERSION = "official-prose-overlap-v2";
+const SHA256 = /^[a-f0-9]{64}$/;
+
+function isSha256(value: unknown): value is string {
+  return typeof value === "string" && value.length === 64 && SHA256.test(value);
+}
+
+function finiteInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+export function eligibleBillText(bill: Bill): boolean {
+  const source = bill.text_source;
+  return bill.analysis_version === BILL_ANALYSIS_VERSION
+    && bill.analysis_status === "analyzed"
+    && source?.source_format === "govinfo_official_bill_xml"
+    && source.extraction_version === "govinfo-legislative-body-v2"
+    && typeof source.source_url === "string"
+    && source.source_url.startsWith("https://www.govinfo.gov/")
+    && isSha256(source.source_sha256)
+    && isSha256(source.text_sha256);
+}
+
+export function validatedModelSimilarity(bill: Bill): number | null {
+  if (!eligibleBillText(bill) || bill.model_analysis_status !== "analyzed") return null;
+  const match = bill.alec_match;
+  const evidence = match?.evidence;
+  if (!finiteInRange(match?.similarity_score, 0, 1)
+      || !evidence
+      || evidence.target_text_sha256 !== bill.text_source?.text_sha256
+      || !isSha256(evidence.matched_source_sha256)
+      || !isSha256(evidence.matched_text_sha256)
+      || !finiteInRange(evidence.longest_passage_words, 32, Number.MAX_VALUE)
+      || !finiteInRange(evidence.target_shingle_coverage, 0, 1)
+      || !finiteInRange(evidence.matched_shingle_coverage, 0, 1)) return null;
+  return Math.max(evidence.target_shingle_coverage, evidence.matched_shingle_coverage) >= 0.2
+    ? match.similarity_score : null;
+}
+
+export function eligibleModelSimilarity(bill: Bill): number {
+  return validatedModelSimilarity(bill) ?? 0;
+}
+
+export function eligibleDonorAlignment(detail: MemberDetail): number {
+  return detail.bills_analysis_version === BILL_ANALYSIS_VERSION
+    && detail.donor_alignment_analysis_version === BILL_ANALYSIS_VERSION
+    && detail.donor_alignment_status === "available"
+    && finiteInRange(detail.donor_alignment_score, 0, 100)
+    ? detail.donor_alignment_score : 0;
+}
+
 export function computeScore(
   member: MemberSummary,
   detail: MemberDetail | null,
@@ -113,17 +164,18 @@ export function computeScore(
   const wealthScore = 0;
 
   // 3. Donor-industry keyword overlap (20) — from the bills pipeline
-  const donorAlignment = d.donor_alignment_score ?? 0;
+  const donorAlignment = eligibleDonorAlignment(d);
   const donorScore = Math.min(20, pyRound(donorAlignment * 0.2));
 
   // 4. Bill text / ALEC similarity (15)
   const bills = d.bills ?? [];
   let maxAlec = 0;
-  for (const b of bills) {
-    const matched = b.alec_match?.similarity_score ?? 0;
-    if (matched > maxAlec) maxAlec = matched;
-    const raw = b.alec_best_similarity ?? 0;
-    if (raw > maxAlec) maxAlec = raw;
+  let validatedModels = 0;
+  for (const bill of bills) {
+    const similarity = validatedModelSimilarity(bill);
+    if (similarity === null) continue;
+    maxAlec = Math.max(maxAlec, similarity);
+    validatedModels++;
   }
   let alecScore = 0;
   if (maxAlec >= 0.8) alecScore = 15;
@@ -194,12 +246,19 @@ export function computeScore(
       donor_alignment: {
         score: donorScore,
         max: 20,
-        detail: `Donor-industry keyword overlap score ${donorAlignment.toFixed(1)}`,
+        detail: d.bills_analysis_version === BILL_ANALYSIS_VERSION
+          && d.donor_alignment_analysis_version === BILL_ANALYSIS_VERSION
+          && d.donor_alignment_status === "available"
+          && finiteInRange(d.donor_alignment_score, 0, 100)
+          ? `Donor-industry keyword overlap score ${donorAlignment.toFixed(1)}`
+          : "Donor-industry overlap unavailable: current validated analysis is required",
       },
       alec_similarity: {
         score: alecScore,
         max: 15,
-        detail: `Peak ALEC model-bill similarity ${maxAlec.toFixed(2)} across ${bills.length} bill(s); similarity does not establish authorship`,
+        detail: validatedModels
+          ? `Peak validated ALEC model-bill similarity ${maxAlec.toFixed(2)} across ${validatedModels} bill(s) with matching evidence; similarity does not establish authorship`
+          : "No validated ALEC model-bill match evidence; unavailable evidence is not a verified non-match",
       },
       foreign_travel: {
         score: travelScore,

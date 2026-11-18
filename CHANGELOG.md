@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.6] - 2026-11-18
+### Fixed
+- Gate bill/model similarity and donor alignment on the official-prose-v2 provenance contract, official XML extraction version, hashes and passage/coverage evidence. Legacy raw similarity cannot bypass the gate, including when filtering the global bills endpoint.
+- Distinguish unavailable analysis from a verified non-match while preserving raw records and response keys.
+
 ## [1.4.5] - 2026-11-18
 ### Documentation
 - Clarify that the Python scoring function is an upstream reference, not a runtime import: the API fetches JSON and computes its breakdown locally.

@@ -58,12 +58,36 @@ export interface Vote {
   url: string;
 }
 
+export interface BillTextSource {
+  source_format?: string;
+  extraction_version?: string;
+  source_url?: string;
+  source_sha256?: string;
+  text_sha256?: string;
+  [k: string]: unknown;
+}
+
+export interface ModelMatchEvidence {
+  target_text_sha256?: string;
+  matched_source_sha256?: string;
+  matched_text_sha256?: string;
+  longest_passage_words?: number;
+  target_shingle_coverage?: number;
+  matched_shingle_coverage?: number;
+  [k: string]: unknown;
+}
+
 export interface AlecMatch {
+  evidence?: ModelMatchEvidence;
   similarity_score?: number;
   [k: string]: unknown;
 }
 
 export interface Bill {
+  analysis_version?: string;
+  analysis_status?: string;
+  model_analysis_status?: string;
+  text_source?: BillTextSource;
   bill_id: string;
   title: string;
   type: string;
@@ -134,6 +158,9 @@ export interface MemberDetail extends MemberSummary {
   bills_updated?: string;
   bills_count?: number;
   donor_alignment_score?: number;
+  bills_analysis_version?: string;
+  donor_alignment_analysis_version?: string;
+  donor_alignment_status?: string;
   alec_match_count?: number;
   donor_match_count?: number;
 
