@@ -55,6 +55,27 @@ function daysAgoIso(days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Name-only/automatic SEC matches are not identity evidence. Fail closed for
+ * legacy data and failed refreshes; preserve the original counts in the source.
+ * Keep this predicate aligned with CongressWatch's verified-SEC-only policy.
+ */
+export function hasVerifiedSecSignals(member: MemberSummary): boolean {
+  const cik = member.edgar_cik;
+  const evidence = member.edgar_identity_evidence;
+  return member.edgar_identity_status === "verified"
+    && typeof cik === "string" && cik.trim().length > 0
+    && typeof member.edgar_identity_cik === "string"
+    && member.edgar_identity_cik === cik
+    && Array.isArray(evidence) && evidence.length > 0
+    && evidence.every((url) => typeof url === "string" && url.startsWith("https://"))
+    && member.edgar_data_status === "available"
+    && member.edgar_status !== "query_failed"
+    && typeof member.corporate_insider_signals === "number"
+    && Number.isFinite(member.corporate_insider_signals)
+    && member.corporate_insider_signals >= 0;
+}
+
 export function computeScore(
   member: MemberSummary,
   detail: MemberDetail | null,
@@ -64,7 +85,8 @@ export function computeScore(
   const today = daysAgoIso(0);
 
   // 1. Activity, not demonstrated trade timing or wrongdoing.
-  const signals = member.corporate_insider_signals ?? 0;
+  const verifiedSec = hasVerifiedSecSignals(member);
+  const signals = verifiedSec ? member.corporate_insider_signals : 0;
   let tradeScore = 0;
   if (signals >= 3) tradeScore += 25;
   else if (signals === 2) tradeScore += 18;
@@ -155,12 +177,14 @@ export function computeScore(
     total,
     stored,
     drift: total - stored,
-    flags: member.flags ?? [],
+    flags: (member.flags ?? []).filter((flag) => flag !== "trade" || verifiedSec),
     components: {
       trade_timing: {
         score: tradeScore,
         max: 25,
-        detail: `${signals} EDGAR insider signal(s); ${recentTrades} PTR trade(s) in the last 365 days`,
+        detail: verifiedSec
+          ? `${signals} identity-verified EDGAR signal(s); ${recentTrades} PTR trade(s) in the last 365 days`
+          : `SEC signals excluded: identity evidence or available retrieval not verified; ${recentTrades} PTR trade(s) in the last 365 days`,
       },
       wealth_gap: {
         score: wealthScore,

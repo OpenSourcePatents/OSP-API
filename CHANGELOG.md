@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.4.4] - 2026-11-18
+### Fixed
+- Exclude unverified SEC identity matches and unavailable retrievals from computed score components and SEC-derived flags, preserving raw upstream fields and the response contract.
+- Document identity/retrieval eligibility and coordinated upstream rollout.
+
 ## [1.4.3] - 2026-11-16
 ### Fixed
 - Align score breakdown with corrected CongressWatch methodology: suspend campaign-receipt wealth estimates, exclude future trade/travel dates, and use delegate/sample-aware attendance scoring with 25% saturation.
