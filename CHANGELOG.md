@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.4.5] - 2026-11-18
+### Documentation
+- Clarify that the Python scoring function is an upstream reference, not a runtime import: the API fetches JSON and computes its breakdown locally.
+
 ## [1.4.4] - 2026-11-18
 ### Fixed
 - Exclude unverified SEC identity matches and unavailable retrievals from computed score components and SEC-derived flags, preserving raw upstream fields and the response contract.
