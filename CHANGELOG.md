@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.4.6] - 2026-11-18
+### Fixed
+- Gate bill/model similarity and donor alignment on the official-prose-v2 provenance contract, official XML extraction version, hashes and passage/coverage evidence. Legacy raw similarity cannot bypass the gate, including when filtering the global bills endpoint.
+- Distinguish unavailable analysis from a verified non-match while preserving raw records and response keys.
+
+## [1.4.5] - 2026-11-18
+### Documentation
+- Clarify that the Python scoring function is an upstream reference, not a runtime import: the API fetches JSON and computes its breakdown locally.
+
+## [1.4.4] - 2026-11-18
+### Fixed
+- Exclude unverified SEC identity matches and unavailable retrievals from computed score components and SEC-derived flags, preserving raw upstream fields and the response contract.
+- Document identity/retrieval eligibility and coordinated upstream rollout.
+
+## [1.4.3] - 2026-11-16
+### Fixed
+- Align score breakdown with corrected CongressWatch methodology: suspend campaign-receipt wealth estimates, exclude future trade/travel dates, and use delegate/sample-aware attendance scoring with 25% saturation.
+- Preserve all existing response fields and maxima; clarify component descriptions and methodology drift.
+
 ## [1.4.2] - 2026-10-20
 ### Changed
 - Moved the footer logo to the right of "Powered by OSP".

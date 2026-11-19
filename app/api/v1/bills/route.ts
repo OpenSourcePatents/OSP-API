@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getIndex } from "@/lib/aggregate";
 import { paginate } from "@/lib/congress";
+import { validatedModelSimilarity } from "@/lib/scoring";
 import { validateApiKey } from "@/lib/auth";
 import { paginated, err, options } from "@/lib/response";
 
@@ -54,11 +55,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (minAlecNum != null && !Number.isNaN(minAlecNum)) {
-      const best = Math.max(
-        b.alec_best_similarity ?? 0,
-        b.alec_match?.similarity_score ?? 0,
-      );
-      if (best < minAlecNum) return false;
+      const best = validatedModelSimilarity(b);
+      if (best === null || best < minAlecNum) return false;
     }
     return true;
   });
