@@ -63,12 +63,27 @@ function daysAgoIso(days: number): string {
 export function hasVerifiedSecSignals(member: MemberSummary): boolean {
   const cik = member.edgar_cik;
   const evidence = member.edgar_identity_evidence;
+  const checks = member.edgar_identity_evidence_checks;
+  // Match the site receipt validator, including original URL order and CIK.
+  const httpsUrl = (value: unknown): boolean => {
+    if (typeof value !== "string") return false;
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && !!url.hostname && !url.username && !url.password;
+    } catch { return false; }
+  };
   return member.edgar_identity_status === "verified"
     && typeof cik === "string" && cik.trim().length > 0
     && typeof member.edgar_identity_cik === "string"
     && member.edgar_identity_cik === cik
     && Array.isArray(evidence) && evidence.length > 0
-    && evidence.every((url) => typeof url === "string" && url.startsWith("https://"))
+    && evidence.every(httpsUrl)
+    && Array.isArray(checks) && checks.length === evidence.length
+    && checks.every((check, i) => check && check.url === evidence[i]
+      && check.cik === member.edgar_identity_cik && check.status === "available"
+      && httpsUrl(check.resolved_url)
+      && typeof check.checked_at === "string" && !!check.checked_at
+      && typeof check.sha256 === "string" && /^[a-f0-9]{64}$/.test(check.sha256))
     && member.edgar_data_status === "available"
     && member.edgar_status !== "query_failed"
     && typeof member.corporate_insider_signals === "number"
@@ -163,25 +178,10 @@ export function computeScore(
   // wealth from campaign fundraising.
   const wealthScore = 0;
 
-  // 3. Donor-industry keyword overlap (20) — from the bills pipeline
-  const donorAlignment = eligibleDonorAlignment(d);
-  const donorScore = Math.min(20, pyRound(donorAlignment * 0.2));
-
-  // 4. Bill text / ALEC similarity (15)
-  const bills = d.bills ?? [];
-  let maxAlec = 0;
-  let validatedModels = 0;
-  for (const bill of bills) {
-    const similarity = validatedModelSimilarity(bill);
-    if (similarity === null) continue;
-    maxAlec = Math.max(maxAlec, similarity);
-    validatedModels++;
-  }
-  let alecScore = 0;
-  if (maxAlec >= 0.8) alecScore = 15;
-  else if (maxAlec >= 0.65) alecScore = 11;
-  else if (maxAlec >= 0.5) alecScore = 8;
-  else if (maxAlec >= 0.35) alecScore = 4;
+  // The current site methodology suspends both components, even if legacy
+  // or hypothetical fields claim validated donor/model results. No reweighting.
+  const donorScore = 0;
+  const alecScore = 0;
 
   // 5. Foreign travel (10) — trips departing within the last two years
   const travel = d.travel ?? [];
@@ -192,7 +192,8 @@ export function computeScore(
     recentTrips = travel.filter(
       (t) => {
         const date = parseDateAny(t.departure_date);
-        return date >= cutoff && date <= today;
+        return t.filer_type !== "staff" && t.filer_type !== "unverified"
+          && date >= cutoff && date <= today;
       },
     ).length;
     if (recentTrips >= 5) travelScore = 10;
@@ -229,7 +230,10 @@ export function computeScore(
     total,
     stored,
     drift: total - stored,
-    flags: (member.flags ?? []).filter((flag) => flag !== "trade" || verifiedSec),
+    flags: [
+      ...(member.flags ?? []).filter((flag) => flag !== "trade"),
+      ...(signals > 5 ? ["trade"] : []),
+    ],
     components: {
       trade_timing: {
         score: tradeScore,
@@ -246,24 +250,17 @@ export function computeScore(
       donor_alignment: {
         score: donorScore,
         max: 20,
-        detail: d.bills_analysis_version === BILL_ANALYSIS_VERSION
-          && d.donor_alignment_analysis_version === BILL_ANALYSIS_VERSION
-          && d.donor_alignment_status === "available"
-          && finiteInRange(d.donor_alignment_score, 0, 100)
-          ? `Donor-industry keyword overlap score ${donorAlignment.toFixed(1)}`
-          : "Donor-industry overlap unavailable: current validated analysis is required",
+        detail: "Unavailable: donor alignment methodology is suspended",
       },
       alec_similarity: {
         score: alecScore,
         max: 15,
-        detail: validatedModels
-          ? `Peak validated ALEC model-bill similarity ${maxAlec.toFixed(2)} across ${validatedModels} bill(s) with matching evidence; similarity does not establish authorship`
-          : "No validated ALEC model-bill match evidence; unavailable evidence is not a verified non-match",
+        detail: "Unavailable: no verified primary model corpus; this component is suspended",
       },
       foreign_travel: {
         score: travelScore,
         max: 10,
-        detail: `${recentTrips} sponsored trip(s) in the last 730 days`,
+        detail: `${recentTrips} member trip(s) in the last 730 days; explicit staff and unverified rows excluded`,
       },
       attendance: {
         score: attendanceScore,

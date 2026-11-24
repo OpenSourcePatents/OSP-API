@@ -38,6 +38,10 @@ export interface MemberSummary {
   edgar_identity_status?: string;
   edgar_identity_cik?: string | null;
   edgar_identity_evidence?: string[];
+  edgar_identity_evidence_checks?: {
+    url?: string; cik?: string; status?: string; resolved_url?: string;
+    checked_at?: string; sha256?: string; bytes?: number; error?: string;
+  }[];
   edgar_data_status?: string;
   corporate_insider_signals: number;
   score: number;

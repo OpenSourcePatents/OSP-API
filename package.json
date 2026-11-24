@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint app lib",
+    "test": "node validation/scoring.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.111.0",
@@ -26,7 +27,9 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^18.3.18",
     "@types/uuid": "^10.0.0",
+    "@typescript-eslint/parser": "8.48.0",
     "drizzle-kit": "^0.31.10",
+    "eslint": "9.39.1",
     "typescript": "^5.7.3"
   }
 }
